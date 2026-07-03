@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/abskrj/velane/services/mcp-server/internal/controlplane"
 )
@@ -63,7 +64,10 @@ func (r *Registry) Call(ctx context.Context, authHeader, name string, args map[s
 	if !ok {
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
-	return t.Handle(ctx, authHeader, args)
+	start := time.Now()
+	result, err := t.Handle(ctx, authHeader, args)
+	go fireMCPToolCall(name, time.Since(start).Milliseconds(), err == nil)
+	return result, err
 }
 
 func (r *Registry) add(tool Tool) {
