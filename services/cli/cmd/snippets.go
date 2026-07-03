@@ -11,6 +11,7 @@ import (
 
 	"github.com/abskrj/velane/services/cli/internal/client"
 	"github.com/abskrj/velane/services/cli/internal/keyring"
+	"github.com/abskrj/velane/services/cli/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +29,7 @@ var snippetsListCmd = &cobra.Command{
 			return err
 		}
 		snippets, err := c.ListSnippets(context.Background())
+		telemetry.Fire("cli.snippets.list", map[string]any{"error": err != nil})
 		if err != nil {
 			return err
 		}
@@ -93,6 +95,7 @@ var snippetsPushCmd = &cobra.Command{
 		}
 
 		v, err := c.CreateVersion(ctx, snippetID, string(code))
+		telemetry.Fire("cli.push", map[string]any{"language": lang, "error": err != nil})
 		if err != nil {
 			return fmt.Errorf("create version: %w", err)
 		}

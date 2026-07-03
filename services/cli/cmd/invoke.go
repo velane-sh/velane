@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/abskrj/velane/services/cli/internal/client"
 	"github.com/abskrj/velane/services/cli/internal/keyring"
+	"github.com/abskrj/velane/services/cli/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -30,11 +32,19 @@ var invokeCmd = &cobra.Command{
 		}
 
 		if stream {
-			return invokeStream(apiURL, tenantSlug, snippetSlug, env, input, key)
+			err := invokeStream(apiURL, tenantSlug, snippetSlug, env, input, key)
+			telemetry.Fire("cli.invoke", map[string]any{"streaming": true, "error": err != nil})
+			return err
 		}
 
+		start := time.Now()
 		c := client.New(apiURL, tenantSlug, key)
 		result, err := c.Invoke(context.Background(), tenantSlug, snippetSlug, env, input)
+		telemetry.Fire("cli.invoke", map[string]any{
+			"streaming":   false,
+			"error":       err != nil,
+			"duration_ms": time.Since(start).Milliseconds(),
+		})
 		if err != nil {
 			return err
 		}

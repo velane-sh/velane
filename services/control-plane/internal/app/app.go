@@ -19,6 +19,7 @@ import (
 	"github.com/abskrj/velane/services/control-plane/internal/scheduler"
 	"github.com/abskrj/velane/services/control-plane/internal/store/postgres"
 	redisstore "github.com/abskrj/velane/services/control-plane/internal/store/redis"
+	"github.com/abskrj/velane/services/control-plane/internal/telemetry"
 	"github.com/abskrj/velane/services/control-plane/internal/worker"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -127,6 +128,8 @@ func Bootstrap(ctx context.Context, log *zap.Logger) (*App, error) {
 		log.Info("background worker started", zap.Int("workers", cfg.WorkerCount))
 		go runStaleInvocationReaper(ctx, store, log)
 	}
+
+	go telemetry.RunHeartbeat(ctx, store, cfg.PublicBaseURL, cfg.LicenseKey, log)
 
 	licMgr := license.NewManager(cfg.LicenseKey, log)
 
