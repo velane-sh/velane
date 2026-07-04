@@ -1,0 +1,72 @@
+name: Build Images
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Semver without v prefix (e.g. 0.7.17). Omit for sha-only builds."
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: control-plane
+            context: .
+            dockerfile: services/control-plane/Dockerfile
+          - name: bun-executor
+            context: ./services/executor-runtime/bun
+            dockerfile: services/executor-runtime/bun/Dockerfile
+          - name: python-executor
+            context: ./services/executor-runtime/python
+            dockerfile: services/executor-runtime/python/Dockerfile
+          - name: admin
+            context: ./apps/admin
+            dockerfile: apps/admin/Dockerfile
+          - name: mcp-server
+            context: ./services/mcp-server
+            dockerfile: services/mcp-server/Dockerfile
+          - name: embed-dashboard
+            context: ./apps/embed-dashboard
+            dockerfile: apps/embed-dashboard/Dockerfile
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/velane-${{ matrix.name }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

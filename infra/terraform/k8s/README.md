@@ -225,7 +225,9 @@ This updates image tags in `terraform.tfvars`, refreshes kubeconfig, and runs `t
 
 ## CI/CD (GitHub Actions)
 
-Pushes to `main` build Docker images, then `.github/workflows/deploy-aws.yml` runs OpenTofu against this stack on EKS.
+Pushes to `main` build Docker images tagged `latest` and `sha-<commit>`, then `.github/workflows/deploy-aws.yml` runs OpenTofu against this stack on EKS.
+
+Semver tags (`0.7.x`) are created only via **Actions → Release → Run workflow** (patch/minor/major bump). That workflow builds images, publishes grouped release notes on GitHub, and triggers deploy.
 
 ### One-time setup
 
@@ -250,7 +252,7 @@ Pushes to `main` build Docker images, then `.github/workflows/deploy-aws.yml` ru
 
 3. **Manual deploy** — Actions → *Deploy to AWS* → *Run workflow* (optional `image_tag` override).
 
-Image tags default to the semver tag created by the build workflow, falling back to `sha-<commit>`.
+Image tags default to an exact semver tag on the commit when one exists (after a Release), otherwise `sha-<commit>`.
 
 ---
 
