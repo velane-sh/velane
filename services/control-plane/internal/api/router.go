@@ -6,6 +6,7 @@ import (
 
 	"github.com/abskrj/velane/services/control-plane/internal/api/handlers"
 	"github.com/abskrj/velane/services/control-plane/internal/api/middleware"
+	"github.com/abskrj/velane/services/control-plane/internal/api/openapi"
 	"github.com/abskrj/velane/services/control-plane/internal/audit"
 	"github.com/abskrj/velane/services/control-plane/internal/auth"
 	"github.com/abskrj/velane/services/control-plane/internal/auth/oauth"
@@ -76,6 +77,13 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	// Friendly public entry points for the machine-readable API contract.
+	r.Get("/", redirectToOpenAPI)
+	r.Get("/docs", redirectToOpenAPI)
+
+	// Machine-readable API contract — public, no auth.
+	r.Get("/openapi.json", openapi.ServeHTTP)
 
 	// Instance info — public, no auth. Used by the frontend to determine deployment mode and licensed features.
 	r.Get("/v1/instance/info", instanceH.GetInfo)
@@ -287,4 +295,8 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	})
 
 	return r
+}
+
+func redirectToOpenAPI(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/openapi.json", http.StatusTemporaryRedirect)
 }

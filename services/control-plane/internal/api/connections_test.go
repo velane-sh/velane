@@ -315,7 +315,7 @@ func setupWithNango(t *testing.T) *testEnv {
 	exec := remote.New(mockExec.URL, mockExec.URL)
 	sched := scheduler.New(store, exec, testEncKey, nil)
 	log := zap.NewNop()
-	router := api.NewRouter(store, sched, log, testEncKey, auth.NewPasswordProvider(store), nangoClient, "", "", "", "", "", "", nil)
+	router := api.NewRouter(store, sched, log, testEncKey, auth.NewPasswordProvider(store), nangoClient, "", "", "", "", "", "", nil, nil)
 
 	slug := fmt.Sprintf("test-nango-%d", time.Now().UnixNano())
 	tenant, err := store.CreateTenant(context.Background(), "Nango Tenant", slug)

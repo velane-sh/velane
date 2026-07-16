@@ -1,0 +1,43 @@
+name: OpenAPI Contract
+
+on:
+  pull_request:
+    paths:
+      - "services/control-plane/internal/api/**"
+      - "services/control-plane/internal/models/**"
+      - "services/control-plane/go.mod"
+      - "services/control-plane/go.sum"
+      - "Makefile"
+      - ".github/workflows/openapi.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "services/control-plane/internal/api/**"
+      - "services/control-plane/internal/models/**"
+      - "services/control-plane/go.mod"
+      - "services/control-plane/go.sum"
+      - "Makefile"
+      - ".github/workflows/openapi.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/control-plane
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/control-plane/go.mod
+          cache-dependency-path: services/control-plane/go.sum
+
+      - name: Validate contract and route coverage
+        run: go test ./internal/api -run TestOpenAPI -count=1
