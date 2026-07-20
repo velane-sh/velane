@@ -149,6 +149,8 @@ cd services/cli && go build -o velane .
 
 Full API reference, configuration, deployment guides (EKS, Docker, Firecracker), and integration setup at **[docs.velane.sh](https://docs.velane.sh)**.
 
+Every control-plane deployment also publishes its OpenAPI 3.1 contract at `GET /openapi.json` (for local development: http://localhost:8080/openapi.json).
+
 ---
 
 ## Note for AI coding agents
