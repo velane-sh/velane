@@ -175,14 +175,12 @@ export default function Home() {
           <div className="relative mx-auto grid w-full max-w-5xl gap-16 px-6 md:grid-cols-2 md:items-center">
             <div className="max-w-xl">
               <h1 className="text-5xl font-medium leading-[1.1] tracking-tight text-zinc-900 md:text-6xl">
-                Don&apos;t write workflows.
-                <br />
-                Let your agent do it.
+                Integration lifecycle infrastructure for AI agents
               </h1>
               <p className="mt-6 text-lg leading-relaxed text-zinc-600">
-                Connect Velane to Cursor or Claude via MCP. Your agent creates
-                workflows, pulls integration docs, tests against dev, and
-                promotes to production — without leaving the chat.
+                Give your agents one place to discover integrations, build and
+                test workflows, and promote them safely from development to
+                production, all without leaving the chat.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-4">
                 <a
