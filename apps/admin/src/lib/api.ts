@@ -480,6 +480,16 @@ export const api = {
       throw new Error(err.error ?? res.statusText)
     }
 
+    const contentType = res.headers.get('Content-Type')?.toLowerCase() ?? ''
+    if (!contentType.includes('text/event-stream')) {
+      const result = await res.json() as InvocationResult
+      result.logs?.forEach((line) => handlers.onLog?.(line))
+      if (result.error) handlers.onError?.(result.error)
+      handlers.onResult?.(result.output)
+      handlers.onDone?.()
+      return
+    }
+
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
@@ -504,7 +514,9 @@ export const api = {
           handlers.onChunk?.(ev.data ?? '')
           break
         case 'result':
-          handlers.onResult?.(ev.output ?? '')
+          handlers.onResult?.(
+            Object.prototype.hasOwnProperty.call(ev, 'output') ? ev.output : '',
+          )
           break
         case 'error':
           handlers.onError?.(ev.message ?? ev.error ?? 'error')
@@ -514,15 +526,17 @@ export const api = {
 
     for (;;) {
       const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+      buffer = buffer.replace(/\r\n/g, '\n')
       let sep: number
       while ((sep = buffer.indexOf('\n\n')) !== -1) {
         const rawEvent = buffer.slice(0, sep)
         buffer = buffer.slice(sep + 2)
         dispatch(rawEvent)
       }
+      if (done) break
     }
+    if (buffer.trim()) dispatch(buffer)
     handlers.onDone?.()
   },
 }
@@ -532,7 +546,7 @@ interface StreamEvent {
   stream?: string
   text?: string
   data?: string
-  output?: string
+  output?: unknown
   message?: string
   error?: string
   done?: boolean
@@ -541,7 +555,7 @@ interface StreamEvent {
 export interface StreamHandlers {
   onLog?: (line: LogLine) => void
   onChunk?: (data: string) => void
-  onResult?: (output: string) => void
+  onResult?: (output: unknown) => void
   onError?: (message: string) => void
   onDone?: () => void
 }
