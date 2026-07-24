@@ -171,12 +171,10 @@ curl -s -X PUT \
 
 ## Contributing
 
-```bash
-cd services/control-plane && go test ./...   # Go tests
-cd apps/admin && npx tsc --noEmit            # Frontend type check
-```
-
-Open an issue first for non-trivial changes. PRs should pass `go vet ./...` and `go test ./...`.
+Contributions are welcome. Start with the
+[contributing guide](./CONTRIBUTING.md) for development setup, testing, and pull
+request expectations. Open an issue before beginning substantial features or
+public API changes.
 
 ---
 
