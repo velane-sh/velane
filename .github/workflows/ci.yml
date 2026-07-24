@@ -56,8 +56,14 @@ jobs:
 
       - name: Run unit and integration tests
         run: |
-          mapfile -t packages < <(go list ./... | sed '\|/internal/executor/firecracker$|d')
-          go test -count=1 "${packages[@]}"
+          go test -count=1 ./internal/store/redis
+          mapfile -t packages < <(
+            go list ./... |
+              sed \
+                -e '\|/internal/executor/firecracker$|d' \
+                -e '\|/internal/store/redis$|d'
+          )
+          go test -count=1 -p 1 "${packages[@]}"
 
       - name: Build
         run: go build ./...
