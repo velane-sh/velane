@@ -18,6 +18,36 @@ type LogsHandler struct {
 	log   *zap.Logger
 }
 
+type invocationLogSummary struct {
+	ID           string                  `json:"id"`
+	SnippetID    string                  `json:"snippet_id"`
+	VersionID    string                  `json:"version_id"`
+	Environment  string                  `json:"environment"`
+	TenantID     string                  `json:"tenant_id"`
+	Status       models.InvocationStatus `json:"status"`
+	DurationMs   int                     `json:"duration_ms"`
+	PeakMemoryMB int                     `json:"peak_memory_mb"`
+	CPUMs        int                     `json:"cpu_ms"`
+	CreatedAt    time.Time               `json:"created_at"`
+	CompletedAt  *time.Time              `json:"completed_at,omitempty"`
+	InvokeMode   string                  `json:"invoke_mode"`
+	PayloadState string                  `json:"payload_state"`
+}
+
+func summarizeInvocations(invocations []*models.Invocation) []invocationLogSummary {
+	items := make([]invocationLogSummary, 0, len(invocations))
+	for _, invocation := range invocations {
+		items = append(items, invocationLogSummary{
+			ID: invocation.ID, SnippetID: invocation.SnippetID, VersionID: invocation.VersionID,
+			Environment: invocation.Environment, TenantID: invocation.TenantID, Status: invocation.Status,
+			DurationMs: invocation.DurationMs, PeakMemoryMB: invocation.PeakMemoryMB, CPUMs: invocation.CPUMs,
+			CreatedAt: invocation.CreatedAt, CompletedAt: invocation.CompletedAt,
+			InvokeMode: invocation.InvokeMode, PayloadState: invocation.PayloadState,
+		})
+	}
+	return items
+}
+
 // NewLogsHandler constructs a LogsHandler.
 func NewLogsHandler(store *postgres.Store, log *zap.Logger) *LogsHandler {
 	return &LogsHandler{store: store, log: log}
@@ -112,6 +142,6 @@ func (h *LogsHandler) GetSnippetLogs(w http.ResponseWriter, r *http.Request) {
 			"start_time": r.URL.Query().Get("start_time"),
 			"end_time":   r.URL.Query().Get("end_time"),
 		},
-		"items": invocations,
+		"items": summarizeInvocations(invocations),
 	})
 }

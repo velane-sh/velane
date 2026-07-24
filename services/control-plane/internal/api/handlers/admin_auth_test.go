@@ -261,6 +261,36 @@ func TestLogout(t *testing.T) {
 	}
 }
 
+func TestRefreshToken_AcceptsCookieWithEmptyBody(t *testing.T) {
+	h := handlers.NewAdminAuthHandler(&mockAuthProvider{}, &mockAdminAuthStore{}, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "velane_refresh", Value: "refresh-token"})
+	rr := httptest.NewRecorder()
+
+	h.RefreshToken(rr, req)
+
+	// A non-JWT provider cannot rotate the token, but reaching this response proves
+	// the cookie was accepted instead of the empty body being rejected as invalid.
+	if rr.Code != http.StatusNotImplemented {
+		t.Fatalf("expected 501, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestRefreshToken_RejectsMalformedJSON(t *testing.T) {
+	h := handlers.NewAdminAuthHandler(&mockAuthProvider{}, &mockAdminAuthStore{}, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/auth/refresh", bytes.NewBufferString("{"))
+	req.AddCookie(&http.Cookie{Name: "velane_refresh", Value: "refresh-token"})
+	rr := httptest.NewRecorder()
+
+	h.RefreshToken(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestMe_ValidSession verifies that GET /me returns the user from context.
 func TestMe_ValidSession(t *testing.T) {
 	h := handlers.NewAdminAuthHandler(&mockAuthProvider{}, &mockAdminAuthStore{}, zap.NewNop())

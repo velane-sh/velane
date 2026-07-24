@@ -8,6 +8,8 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -360,7 +362,7 @@ type refreshTokenRequest struct {
 // Returns a new AuthTokenPair. The old refresh token is revoked (rotation).
 func (h *AdminAuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	var req refreshTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

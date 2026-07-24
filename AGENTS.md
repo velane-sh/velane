@@ -191,7 +191,7 @@ tofu -chdir=../aws-eks output -raw acm_certificate_arn
 
 ## Pull requests
 
-When creating a pull request, **always add exactly one changelog label** so release notes are grouped correctly (see `.github/release.yml`).
+When creating a pull request, add the appropriate changelog label so release notes are grouped correctly (see `.github/release.yml`).
 
 Use `gh pr create --label <label>` or `gh pr edit <number> --add-label <label>` after opening the PR.
 

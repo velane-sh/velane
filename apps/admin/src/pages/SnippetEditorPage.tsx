@@ -207,7 +207,8 @@ export default function SnippetEditorPage() {
     setRunLogs([])
 
     const chunks: string[] = []
-    let resultOutput: string | null = null
+    let resultOutput: unknown
+    let receivedResult = false
     let errMessage = ''
 
     try {
@@ -218,18 +219,21 @@ export default function SnippetEditorPage() {
         },
         onResult: (output) => {
           resultOutput = output
+          receivedResult = true
         },
         onError: (message) => {
           errMessage = message
         },
       })
 
-      const rawOutput = resultOutput ?? chunks.join('')
+      const rawOutput = receivedResult ? resultOutput : chunks.join('')
       let parsedOutput: unknown = rawOutput
-      try {
-        parsedOutput = JSON.parse(rawOutput)
-      } catch {
-        parsedOutput = rawOutput
+      if (typeof rawOutput === 'string') {
+        try {
+          parsedOutput = JSON.parse(rawOutput)
+        } catch {
+          parsedOutput = rawOutput
+        }
       }
 
       setInvokeResult({

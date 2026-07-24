@@ -1,0 +1,375 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Velane Control Plane API",
+    "version": "1.0.0",
+    "description": "HTTP API for Velane authentication, tenant administration, workflows, integrations, invocation, observability, and embeds. Unless stated otherwise, authenticated operations accept either a Velane API key (`vl_...`), a session JWT, or the session cookie. The `x-required-scope` extension records the minimum API-key scope or session role."
+  },
+  "servers": [
+    { "url": "/", "description": "Current Velane deployment" }
+  ],
+  "tags": [
+    { "name": "System" },
+    { "name": "Authentication" },
+    { "name": "Tenants" },
+    { "name": "Integrations" },
+    { "name": "Connections" },
+    { "name": "Snippets" },
+    { "name": "Versions" },
+    { "name": "Secrets" },
+    { "name": "Invocations" },
+    { "name": "Observability" },
+    { "name": "Embeds" },
+    { "name": "Webhooks" }
+  ],
+  "security": [
+    { "bearerAuth": [] },
+    { "sessionCookie": [] }
+  ],
+  "paths": {
+    "/": {
+      "get": { "operationId": "openAPIEntryPoint", "summary": "Redirect to the OpenAPI contract", "tags": ["System"], "security": [], "responses": { "307": { "description": "Temporary redirect to `/openapi.json`.", "headers": { "Location": { "required": true, "schema": { "type": "string", "const": "/openapi.json" } } } } } }
+    },
+    "/docs": {
+      "get": { "operationId": "openAPIDocsEntryPoint", "summary": "Redirect to the OpenAPI contract", "tags": ["System"], "security": [], "responses": { "307": { "description": "Temporary redirect to `/openapi.json`.", "headers": { "Location": { "required": true, "schema": { "type": "string", "const": "/openapi.json" } } } } } }
+    },
+    "/healthz": {
+      "get": { "operationId": "healthCheck", "summary": "Check service health", "tags": ["System"], "security": [], "responses": { "200": { "description": "Service is healthy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } } } } }
+    },
+    "/openapi.json": {
+      "get": { "operationId": "getOpenAPI", "summary": "Get the OpenAPI contract", "tags": ["System"], "security": [], "responses": { "200": { "description": "OpenAPI 3.1 document", "content": { "application/json": { "schema": { "type": "object" } } } } } }
+    },
+    "/v1/instance/info": {
+      "get": { "operationId": "getInstanceInfo", "summary": "Get deployment and license information", "tags": ["System"], "security": [], "responses": { "200": { "description": "Instance information", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InstanceInfo" } } } } } }
+    },
+    "/.well-known/jwks.json": {
+      "get": { "operationId": "getJWKS", "summary": "Get JWT verification keys", "tags": ["Authentication"], "security": [], "responses": { "200": { "description": "JSON Web Key Set", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JWKS" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/tenants": {
+      "post": { "operationId": "createTenant", "summary": "Bootstrap a tenant", "description": "Intentionally unauthenticated for self-hosted bootstrap. Production deployments should restrict this endpoint at the network edge.", "tags": ["Tenants"], "security": [], "requestBody": { "$ref": "#/components/requestBodies/CreateTenant" }, "responses": { "201": { "description": "Tenant created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Tenant" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/admin/auth/register": {
+      "post": { "operationId": "register", "summary": "Register a user", "tags": ["Authentication"], "security": [], "requestBody": { "$ref": "#/components/requestBodies/Register" }, "responses": { "201": { "description": "User registered and authenticated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterResponse" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/admin/auth/login": {
+      "post": { "operationId": "login", "summary": "Authenticate with email and password", "tags": ["Authentication"], "security": [], "requestBody": { "$ref": "#/components/requestBodies/Login" }, "responses": { "200": { "description": "Authenticated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Session" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } } }
+    },
+    "/v1/admin/auth/logout": {
+      "post": { "operationId": "logout", "summary": "Revoke the current session", "tags": ["Authentication"], "security": [], "responses": { "204": { "$ref": "#/components/responses/NoContent" } } }
+    },
+    "/v1/admin/auth/refresh": {
+      "post": { "operationId": "refreshSession", "summary": "Rotate a refresh token", "tags": ["Authentication"], "security": [], "requestBody": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RefreshRequest" } } } }, "responses": { "200": { "description": "Rotated token pair", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenPair" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "501": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/v1/admin/auth/oauth/providers": {
+      "get": { "operationId": "listOAuthProviders", "summary": "List enabled social login providers", "description": "Present only when at least one OAuth provider is configured.", "tags": ["Authentication"], "security": [], "responses": { "200": { "description": "Provider names", "content": { "application/json": { "schema": { "type": "object", "required": ["providers"], "properties": { "providers": { "type": "array", "items": { "type": "string" } } } } } } } } }
+    },
+    "/v1/admin/auth/oauth/{provider}/start": {
+      "parameters": [{ "$ref": "#/components/parameters/Provider" }],
+      "get": { "operationId": "startOAuthLogin", "summary": "Start social login", "description": "Present only when social login is configured.", "tags": ["Authentication"], "security": [], "responses": { "302": { "$ref": "#/components/responses/Redirect" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/admin/auth/oauth/{provider}/callback": {
+      "parameters": [{ "$ref": "#/components/parameters/Provider" }],
+      "get": { "operationId": "completeOAuthLogin", "summary": "Complete social login", "description": "OAuth callback used by the configured identity provider.", "tags": ["Authentication"], "security": [], "parameters": [{ "name": "code", "in": "query", "schema": { "type": "string" } }, { "name": "state", "in": "query", "schema": { "type": "string" } }, { "name": "error", "in": "query", "schema": { "type": "string" } }], "responses": { "302": { "$ref": "#/components/responses/Redirect" }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/admin/auth/me": {
+      "get": { "operationId": "getCurrentUser", "summary": "Get the current session user", "tags": ["Authentication"], "security": [{ "sessionBearer": [] }, { "sessionCookie": [] }], "responses": { "200": { "description": "Current user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } } }
+    },
+    "/v1/admin/auth/orgs": {
+      "get": { "operationId": "listMyTenants", "summary": "List the current user's organizations", "tags": ["Authentication"], "security": [{ "sessionBearer": [] }, { "sessionCookie": [] }], "responses": { "200": { "description": "Organization memberships", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/OrgMembership" } } } } } } },
+      "post": { "operationId": "createMyTenant", "summary": "Create an organization for the current user", "tags": ["Authentication"], "security": [{ "sessionBearer": [] }, { "sessionCookie": [] }], "requestBody": { "$ref": "#/components/requestBodies/CreateTenant" }, "responses": { "201": { "description": "Organization membership created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrgMembership" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/admin/auth/orgs/active": {
+      "get": { "operationId": "getActiveTenant", "summary": "Get the active organization", "tags": ["Authentication"], "security": [{ "sessionBearer": [] }, { "sessionCookie": [] }], "responses": { "200": { "description": "Active organization membership", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrgMembership" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "post": { "operationId": "setActiveTenant", "summary": "Set the active organization", "tags": ["Authentication"], "security": [{ "sessionBearer": [] }, { "sessionCookie": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetActiveTenantRequest" } } } }, "responses": { "200": { "description": "Active organization membership", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrgMembership" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/integrations": {
+      "get": { "operationId": "listIntegrations", "summary": "List available integration providers", "tags": ["Integrations"], "security": [], "parameters": [{ "$ref": "#/components/parameters/Search" }, { "$ref": "#/components/parameters/Limit100" }, { "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "description": "Integration providers", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/IntegrationProvider" } } } } } } }
+    },
+    "/v1/connect/info": {
+      "get": { "operationId": "getConnectInfo", "summary": "Get public OAuth connection metadata", "tags": ["Integrations"], "security": [], "responses": { "200": { "description": "OAuth callback information", "content": { "application/json": { "schema": { "type": "object", "required": ["oauth_callback_url"], "properties": { "oauth_callback_url": { "type": "string", "format": "uri" } } } } } } } }
+    },
+    "/v1/mcp/info": {
+      "get": { "operationId": "getMCPInfo", "summary": "Get the public MCP endpoint", "tags": ["Integrations"], "security": [], "responses": { "200": { "description": "MCP endpoint information", "content": { "application/json": { "schema": { "type": "object", "required": ["mcp_url"], "properties": { "mcp_url": { "type": "string", "format": "uri" } } } } } }, "503": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/v1/nango-assets/{assetPath}": {
+      "parameters": [{ "name": "assetPath", "in": "path", "required": true, "description": "Base64url-encoded asset URL or legacy asset path.", "schema": { "type": "string" } }],
+      "get": { "operationId": "getNangoAsset", "summary": "Proxy a public integration asset", "tags": ["Integrations"], "security": [], "responses": { "200": { "description": "Integration image or other static asset", "headers": { "Cache-Control": { "schema": { "type": "string" } } }, "content": { "image/*": { "schema": { "type": "string", "contentEncoding": "binary" } }, "application/octet-stream": { "schema": { "type": "string", "contentEncoding": "binary" } } } }, "403": { "$ref": "#/components/responses/Forbidden" }, "502": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/v1/tenant/api-keys": {
+      "get": { "operationId": "listAPIKeys", "summary": "List API keys", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "200": { "description": "API keys without secret values", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/APIKey" } } } } }, "403": { "$ref": "#/components/responses/Forbidden" } } },
+      "post": { "operationId": "createAPIKey", "summary": "Create an API key", "tags": ["Tenants"], "x-required-scope": "admin", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateAPIKeyRequest" } } } }, "responses": { "201": { "description": "Created API key; the secret is returned only once", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/APIKey" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/v1/tenant/api-keys/{keyID}": {
+      "parameters": [{ "$ref": "#/components/parameters/KeyID" }],
+      "delete": { "operationId": "deleteAPIKey", "summary": "Revoke an API key", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/tenant/egress": {
+      "get": { "operationId": "getEgressPolicy", "summary": "Get the tenant egress policy", "tags": ["Tenants"], "responses": { "200": { "description": "Egress policy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EgressPolicy" } } } } } },
+      "put": { "operationId": "updateEgressPolicy", "summary": "Update the tenant egress policy", "tags": ["Tenants"], "x-required-scope": "admin", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EgressPolicy" } } } }, "responses": { "200": { "description": "Updated egress policy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EgressPolicy" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/tenant/runtime-limits": {
+      "get": { "operationId": "getRuntimeLimits", "summary": "Get tenant runtime limits", "tags": ["Tenants"], "responses": { "200": { "description": "Runtime limits", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuntimeLimits" } } } } } }
+    },
+    "/v1/tenant/branding": {
+      "get": { "operationId": "getBranding", "summary": "Get tenant branding", "tags": ["Tenants"], "x-required-scope": "invoke", "responses": { "200": { "description": "Branding configuration", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Branding" } } } } } },
+      "put": { "operationId": "updateBranding", "summary": "Update tenant branding", "tags": ["Tenants"], "x-required-scope": "admin", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Branding" } } } }, "responses": { "200": { "description": "Updated branding", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Branding" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/tenant/members": {
+      "get": { "operationId": "listMembers", "summary": "List tenant members", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "200": { "description": "Tenant members", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/TenantMember" } } } } } } }
+    },
+    "/v1/tenant/members/invite": {
+      "post": { "operationId": "inviteMember", "summary": "Invite a tenant member", "tags": ["Tenants"], "x-required-scope": "admin", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InviteMemberRequest" } } } }, "responses": { "201": { "description": "Invite created; the token is returned only once", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InviteMemberResponse" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/tenant/members/{userID}": {
+      "parameters": [{ "$ref": "#/components/parameters/UserID" }],
+      "delete": { "operationId": "removeMember", "summary": "Remove a tenant member", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/v1/tenant/members/invites": {
+      "get": { "operationId": "listInvites", "summary": "List pending tenant invites", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "200": { "description": "Pending invites", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Invite" } } } } } } }
+    },
+    "/v1/tenant/plan": {
+      "get": { "operationId": "getTenantPlan", "summary": "Get tenant plan and entitlements", "tags": ["Tenants"], "responses": { "200": { "description": "Tenant plan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TenantPlan" } } } } } }
+    },
+    "/v1/tenant/usage": {
+      "get": { "operationId": "getTenantUsage", "summary": "Get tenant usage aggregation", "tags": ["Observability"], "x-required-scope": "admin", "parameters": [{ "name": "window", "in": "query", "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" } }], "responses": { "200": { "description": "Usage summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UsageSummary" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/tenant/audit-log": {
+      "get": { "operationId": "listAuditLog", "summary": "List tenant audit entries", "tags": ["Observability"], "x-required-scope": "admin", "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }, { "name": "action", "in": "query", "schema": { "type": "string" } }, { "name": "before", "in": "query", "description": "RFC3339 cursor.", "schema": { "type": "string", "format": "date-time" } }], "responses": { "200": { "description": "Audit entries", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AuditEntry" } } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/tenant/connections": {
+      "get": { "operationId": "listTenantConnections", "summary": "List integration connections", "tags": ["Connections"], "x-required-scope": "invoke", "parameters": [{ "$ref": "#/components/parameters/Search" }, { "$ref": "#/components/parameters/Limit100" }, { "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "description": "Connections", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Connection" } } } } } } },
+      "post": { "operationId": "recordConnection", "summary": "Record a completed integration connection", "tags": ["Connections"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RecordConnectionRequest" } } } }, "responses": { "201": { "description": "Connection recorded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Connection" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/tenant/connections/session": {
+      "post": { "operationId": "createConnectionSession", "summary": "Create an OAuth connection session", "tags": ["Connections"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateConnectionSessionRequest" } } } }, "responses": { "200": { "description": "Short-lived connect session", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConnectionSession" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "502": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/v1/tenant/connections/{provider}": {
+      "parameters": [{ "$ref": "#/components/parameters/Provider" }],
+      "delete": { "operationId": "disconnectProvider", "summary": "Disconnect an integration provider", "tags": ["Connections"], "x-required-scope": "manage", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/connections": {
+      "get": { "operationId": "listConnections", "summary": "List connections for the authenticated token", "tags": ["Connections"], "x-required-scope": "invoke", "parameters": [{ "$ref": "#/components/parameters/Search" }, { "$ref": "#/components/parameters/Limit100" }, { "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "description": "Connections", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Connection" } } } } } } }
+    },
+    "/v1/integrations/{provider}/docs": {
+      "parameters": [{ "$ref": "#/components/parameters/Provider" }],
+      "get": { "operationId": "getIntegrationDocs", "summary": "Get integration provider documentation", "tags": ["Integrations"], "x-required-scope": "invoke", "responses": { "200": { "description": "Structured provider documentation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProviderDocs" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/integrations/configured": {
+      "get": { "operationId": "listConfiguredIntegrations", "summary": "List tenant integration credential profiles", "tags": ["Integrations"], "x-required-scope": "invoke", "parameters": [{ "$ref": "#/components/parameters/Search" }, { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["connected", "configured", "ready", "all"] } }, { "$ref": "#/components/parameters/Limit100" }, { "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "description": "Configured integration profiles", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/IntegrationProfile" } } } } } } },
+      "post": { "operationId": "configureIntegration", "summary": "Create or update integration credentials", "tags": ["Integrations"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfigureIntegrationRequest" } } } }, "responses": { "200": { "description": "Configured integration profile", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntegrationProfile" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "502": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/v1/integrations/configured/{providerConfigKey}": {
+      "parameters": [{ "name": "providerConfigKey", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "delete": { "operationId": "deleteConfiguredIntegration", "summary": "Delete an integration credential profile", "tags": ["Integrations"], "x-required-scope": "manage", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "404": { "$ref": "#/components/responses/NotFound" }, "502": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/v1/snippets": {
+      "get": { "operationId": "listSnippets", "summary": "List snippets", "tags": ["Snippets"], "responses": { "200": { "description": "Snippets", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Snippet" } } } } } } },
+      "post": { "operationId": "createSnippet", "summary": "Create a snippet", "tags": ["Snippets"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSnippetRequest" } } } }, "responses": { "201": { "description": "Snippet created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Snippet" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/snippets/{snippetID}": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "getSnippet", "summary": "Get a snippet", "tags": ["Snippets"], "responses": { "200": { "description": "Snippet", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Snippet" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "operationId": "deleteSnippet", "summary": "Delete a snippet", "tags": ["Snippets"], "x-required-scope": "manage", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/snippets/{snippetID}/environments": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "listSnippetEnvironments", "summary": "List snippet environments", "tags": ["Versions"], "responses": { "200": { "description": "Snippet environments", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/SnippetEnvironment" } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/snippets/{snippetID}/versions": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "listSnippetVersions", "summary": "List snippet versions", "tags": ["Versions"], "responses": { "200": { "description": "Snippet versions", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/SnippetVersion" } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "post": { "operationId": "createSnippetVersion", "summary": "Create a draft snippet version", "tags": ["Versions"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateVersionRequest" } } } }, "responses": { "201": { "description": "Version created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnippetVersion" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/snippets/{snippetID}/versions/{num}": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }, { "$ref": "#/components/parameters/VersionNumber" }],
+      "get": { "operationId": "getSnippetVersion", "summary": "Get a snippet version", "tags": ["Versions"], "responses": { "200": { "description": "Snippet version", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnippetVersion" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/snippets/{snippetID}/versions/{num}/publish": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }, { "$ref": "#/components/parameters/VersionNumber" }],
+      "post": { "operationId": "publishSnippetVersion", "summary": "Publish a snippet version", "tags": ["Versions"], "x-required-scope": "manage", "parameters": [{ "$ref": "#/components/parameters/Environment" }], "responses": { "200": { "description": "Published snippet version", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnippetVersion" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/snippets/{snippetID}/watch": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "watchSnippetVersions", "summary": "Watch draft versions", "description": "Server-Sent Events stream. Emits `connected` and `version` events and periodic comments.", "tags": ["Versions"], "x-required-scope": "invoke", "responses": { "200": { "description": "Version event stream", "content": { "text/event-stream": { "schema": { "type": "string" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/snippets/{snippetID}/canary": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "post": { "operationId": "setSnippetCanary", "summary": "Configure canary traffic", "tags": ["Versions"], "x-required-scope": "manage", "parameters": [{ "$ref": "#/components/parameters/Environment" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetCanaryRequest" } } } }, "responses": { "200": { "description": "Updated environment", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnippetEnvironment" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "operationId": "clearSnippetCanary", "summary": "Clear canary traffic", "tags": ["Versions"], "x-required-scope": "manage", "parameters": [{ "$ref": "#/components/parameters/Environment" }], "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/secrets": {
+      "get": { "operationId": "listSecrets", "summary": "List secrets and variables", "tags": ["Secrets"], "responses": { "200": { "description": "Secret metadata; variables may include values, credentials never do", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Secret" } } } } } } },
+      "post": { "operationId": "createSecret", "summary": "Create a secret", "tags": ["Secrets"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSecretRequest" } } } }, "responses": { "201": { "description": "Secret metadata", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Secret" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/secrets/{secretID}": {
+      "parameters": [{ "$ref": "#/components/parameters/SecretID" }],
+      "patch": { "operationId": "updateSecret", "summary": "Update a secret value", "tags": ["Secrets"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSecretRequest" } } } }, "responses": { "200": { "description": "Updated secret metadata", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Secret" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "operationId": "deleteSecret", "summary": "Delete a secret", "tags": ["Secrets"], "x-required-scope": "manage", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/snippets/{snippetID}/git-integration": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "getGitIntegration", "summary": "Get a snippet Git integration", "tags": ["Snippets"], "x-required-scope": "manage", "responses": { "200": { "description": "Git integration", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GitIntegration" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "post": { "operationId": "createGitIntegration", "summary": "Configure a snippet Git integration", "tags": ["Snippets"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateGitIntegrationRequest" } } } }, "responses": { "201": { "description": "Git integration; the webhook secret is returned only once", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GitIntegration" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "operationId": "deleteGitIntegration", "summary": "Delete a snippet Git integration", "tags": ["Snippets"], "x-required-scope": "manage", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/invoke/{snippetSlug}": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetSlug" }],
+      "post": { "operationId": "invokeSnippet", "summary": "Invoke a snippet", "description": "The body is passed to the workflow as arbitrary JSON. `sync` returns a buffered result; `async` returns an invocation reference; `stream` or an SSE Accept header can return Server-Sent Events.", "tags": ["Invocations"], "x-required-scope": "invoke", "parameters": [{ "$ref": "#/components/parameters/Environment" }, { "name": "version", "in": "query", "description": "Positive version number, with an optional `v` prefix.", "schema": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "string", "pattern": "^v?[1-9][0-9]*$" }] } }, { "name": "X-Invoke-Mode", "in": "header", "schema": { "type": "string", "enum": ["sync", "async", "stream"], "default": "sync" } }, { "name": "Accept", "in": "header", "schema": { "type": "string", "enum": ["application/json", "text/event-stream"] } }], "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": ["object", "array", "string", "number", "boolean", "null"], "description": "Arbitrary workflow input. For async mode, an object may include callback_url." } } } }, "responses": { "200": { "description": "Synchronous result or event stream", "headers": { "X-Invocation-Id": { "schema": { "type": "string" } }, "X-Duration-Ms": { "schema": { "type": "integer" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InvocationResult" } }, "text/event-stream": { "schema": { "type": "string" } } } }, "202": { "description": "Invocation accepted for asynchronous execution", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AsyncInvocation" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/v1/invocations/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/InvocationID" }],
+      "get": { "operationId": "getInvocation", "summary": "Get invocation details", "tags": ["Invocations"], "responses": { "200": { "description": "Invocation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Invocation" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/invocations/{id}/replay": {
+      "parameters": [{ "$ref": "#/components/parameters/InvocationID" }],
+      "post": { "operationId": "replayInvocation", "summary": "Replay an invocation", "tags": ["Invocations"], "x-required-scope": "manage", "responses": { "200": { "description": "Replay result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReplayResult" } } } }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/logs/snippets/{snippetID}": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "getSnippetLogs", "summary": "Query snippet invocation logs", "tags": ["Observability"], "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 50 } }, { "name": "start_time", "in": "query", "schema": { "type": "string", "format": "date-time" } }, { "name": "end_time", "in": "query", "schema": { "type": "string", "format": "date-time" } }, { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/InvocationStatus" } }, { "name": "env", "in": "query", "schema": { "$ref": "#/components/schemas/Environment" } }], "responses": { "200": { "description": "Invocation log result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LogResult" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/metrics/snippets/{snippetID}": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "getSnippetMetrics", "summary": "Get snippet metrics", "tags": ["Observability"], "parameters": [{ "$ref": "#/components/parameters/Window" }], "responses": { "200": { "description": "Snippet metrics", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnippetMetrics" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/embed/tokens": {
+      "get": { "operationId": "listEmbedTokens", "summary": "List embed tokens", "tags": ["Embeds"], "x-required-scope": "manage", "responses": { "200": { "description": "Embed tokens without secret values", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/EmbedToken" } } } } } } },
+      "post": { "operationId": "createEmbedToken", "summary": "Create an embed token", "tags": ["Embeds"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEmbedTokenRequest" } } } }, "responses": { "201": { "description": "Embed token; the secret is returned only once", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEmbedTokenResponse" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/embed/tokens/{tokenID}": {
+      "parameters": [{ "$ref": "#/components/parameters/TokenID" }],
+      "delete": { "operationId": "revokeEmbedToken", "summary": "Revoke an embed token", "tags": ["Embeds"], "x-required-scope": "manage", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/embed/bootstrap": {
+      "get": { "operationId": "getEmbedBootstrap", "summary": "Get embed context and tenant branding", "tags": ["Embeds"], "security": [{ "embedToken": [] }], "responses": { "200": { "description": "Embed bootstrap context", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmbedBootstrap" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } } }
+    },
+    "/v1/embed/snippets": {
+      "get": { "operationId": "listEmbedSnippets", "summary": "List snippets allowed by an embed token", "tags": ["Embeds"], "security": [{ "embedToken": [] }], "responses": { "200": { "description": "Allowed snippets", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Snippet" } } } } } } }
+    },
+    "/v1/embed/snippets/{snippetID}": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "getEmbedSnippet", "summary": "Get an embed snippet with versions and environments", "tags": ["Embeds"], "security": [{ "embedToken": [] }], "responses": { "200": { "description": "Snippet detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmbedSnippetDetail" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/embed/snippets/{snippetID}/metrics": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "getEmbedSnippetMetrics", "summary": "Get metrics for an embed snippet", "tags": ["Embeds"], "security": [{ "embedToken": [] }], "parameters": [{ "$ref": "#/components/parameters/Window" }], "responses": { "200": { "description": "Snippet metrics", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnippetMetrics" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/embed/snippets/{snippetID}/logs": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "getEmbedSnippetLogs", "summary": "Get invocation logs for an embed snippet", "tags": ["Embeds"], "security": [{ "embedToken": [] }], "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 25 } }, { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/InvocationStatus" } }, { "name": "env", "in": "query", "schema": { "$ref": "#/components/schemas/Environment" } }], "responses": { "200": { "description": "Invocation logs", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LogResult" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/webhooks/git/{snippetID}": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "post": { "operationId": "receiveGitWebhook", "summary": "Receive a signed Git deployment webhook", "description": "Tags matching `v*` publish to prod, main/master publish to staging, and other branches publish to dev.", "tags": ["Webhooks"], "security": [{ "gitWebhookSignature": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GitWebhookPayload" } } } }, "responses": { "200": { "description": "Version created and published", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GitWebhookResult" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/webhooks/nango": {
+      "post": { "operationId": "receiveNangoWebhook", "summary": "Receive a Nango connection webhook", "tags": ["Webhooks"], "security": [{ "nangoWebhookSignature": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }, "responses": { "200": { "description": "Event accepted", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "description": "Velane API key (`vl_...`) or RS256 session JWT." },
+      "sessionBearer": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "RS256 admin session JWT. API keys are not accepted by session-only endpoints." },
+      "sessionCookie": { "type": "apiKey", "in": "cookie", "name": "velane_session", "description": "HttpOnly admin session cookie." },
+      "embedToken": { "type": "http", "scheme": "bearer", "description": "Opaque embed token (`et_...`). Embed tokens never receive admin scope." },
+      "gitWebhookSignature": { "type": "apiKey", "in": "header", "name": "X-Hub-Signature-256", "description": "HMAC-SHA256 signature in `sha256=<hex>` format." },
+      "nangoWebhookSignature": { "type": "apiKey", "in": "header", "name": "X-Nango-Hmac-Sha256", "description": "Nango webhook HMAC signature." }
+    },
+    "parameters": {
+      "SnippetID": { "name": "snippetID", "in": "path", "required": true, "schema": { "type": "string" } },
+      "SnippetSlug": { "name": "snippetSlug", "in": "path", "required": true, "schema": { "type": "string" } },
+      "InvocationID": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+      "Provider": { "name": "provider", "in": "path", "required": true, "schema": { "type": "string" } },
+      "VersionNumber": { "name": "num", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } },
+      "SecretID": { "name": "secretID", "in": "path", "required": true, "schema": { "type": "string" } },
+      "TokenID": { "name": "tokenID", "in": "path", "required": true, "schema": { "type": "string" } },
+      "KeyID": { "name": "keyID", "in": "path", "required": true, "schema": { "type": "string" } },
+      "UserID": { "name": "userID", "in": "path", "required": true, "schema": { "type": "string" } },
+      "Search": { "name": "q", "in": "query", "description": "Case-insensitive search text.", "schema": { "type": "string" } },
+      "Limit100": { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100 } },
+      "Offset": { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } },
+      "Environment": { "name": "env", "in": "query", "schema": { "$ref": "#/components/schemas/Environment", "default": "prod" } },
+      "Window": { "name": "window", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d"], "default": "24h" } }
+    },
+    "requestBodies": {
+      "CreateTenant": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTenantRequest" } } } },
+      "Register": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterRequest" } } } },
+      "Login": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } } }
+    },
+    "responses": {
+      "NoContent": { "description": "Operation completed with no response body." },
+      "BadRequest": { "description": "Invalid request.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Unauthorized": { "description": "Authentication is missing or invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Forbidden": { "description": "The credential lacks access or the required scope.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "The requested resource was not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Error": { "description": "The operation could not be completed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Redirect": { "description": "Redirect to the identity provider or admin application.", "headers": { "Location": { "required": true, "schema": { "type": "string", "format": "uri-reference" } } } }
+    },
+    "schemas": {
+      "Error": { "type": "object", "required": ["error"], "properties": { "error": { "type": "string" } } },
+      "Health": { "type": "object", "required": ["status"], "properties": { "status": { "type": "string", "const": "ok" } } },
+      "InstanceInfo": { "type": "object", "required": ["cloud", "plan", "license_valid", "features"], "properties": { "cloud": { "type": "boolean" }, "plan": { "type": "string" }, "license_valid": { "type": "boolean" }, "features": { "type": "array", "items": { "type": "string" } } } },
+      "Environment": { "type": "string", "enum": ["dev", "staging", "prod"] },
+      "InvocationStatus": { "type": "string", "enum": ["pending", "running", "completed", "failed", "timeout", "oom_killed"] },
+      "CreateTenantRequest": { "type": "object", "required": ["name", "slug"], "properties": { "name": { "type": "string", "minLength": 1 }, "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$" } } },
+      "Tenant": { "type": "object", "required": ["id", "name", "slug", "created_at", "egress_policy", "replay_enabled", "branding", "runtime_limits"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "slug": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "egress_policy": { "$ref": "#/components/schemas/EgressPolicy" }, "replay_enabled": { "type": "boolean" }, "branding": { "$ref": "#/components/schemas/Branding" }, "runtime_limits": { "$ref": "#/components/schemas/RuntimeLimits" }, "license_key": { "type": ["string", "null"] } } },
+      "User": { "type": "object", "required": ["id", "email", "created_at"], "properties": { "id": { "type": "string" }, "email": { "type": "string", "format": "email" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "RegisterRequest": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "format": "password" }, "invite_token": { "type": "string" } } },
+      "LoginRequest": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "format": "password" } } },
+      "Session": { "type": "object", "required": ["session_token", "expires_at"], "properties": { "session_token": { "type": "string" }, "expires_at": { "type": "string", "format": "date-time" } } },
+      "RegisterResponse": { "allOf": [{ "$ref": "#/components/schemas/Session" }, { "type": "object", "required": ["user"], "properties": { "user": { "$ref": "#/components/schemas/User" } } }] },
+      "RefreshRequest": { "type": "object", "properties": { "refresh_token": { "type": "string", "description": "May be omitted when the refresh-token cookie is present." } } },
+      "TokenPair": { "type": "object", "required": ["access_token", "refresh_token", "expires_at", "token_type"], "properties": { "access_token": { "type": "string" }, "refresh_token": { "type": "string" }, "expires_at": { "type": "string", "format": "date-time" }, "token_type": { "type": "string", "const": "Bearer" } } },
+      "SetActiveTenantRequest": { "type": "object", "required": ["slug"], "properties": { "slug": { "type": "string" } } },
+      "OrgMembership": { "type": "object", "required": ["tenant_id", "slug", "name", "role"], "properties": { "tenant_id": { "type": "string" }, "slug": { "type": "string" }, "name": { "type": "string" }, "role": { "type": "string", "enum": ["invoke", "manage", "admin"] } } },
+      "JWK": { "type": "object", "required": ["kty", "use", "alg", "kid", "n", "e"], "properties": { "kty": { "type": "string", "const": "RSA" }, "use": { "type": "string", "const": "sig" }, "alg": { "type": "string", "const": "RS256" }, "kid": { "type": "string" }, "n": { "type": "string" }, "e": { "type": "string" } } },
+      "JWKS": { "type": "object", "required": ["keys"], "properties": { "keys": { "type": "array", "items": { "$ref": "#/components/schemas/JWK" } } } },
+      "Branding": { "type": "object", "properties": { "logo_url": { "type": "string", "format": "uri" }, "accent_color": { "type": "string" }, "font_family": { "type": "string" }, "custom_domain": { "type": "string" }, "hide_branding": { "type": "boolean" } } },
+      "EgressPolicy": { "type": "object", "required": ["blocked_cidrs", "blocked_domains"], "properties": { "blocked_cidrs": { "type": "array", "items": { "type": "string" } }, "blocked_domains": { "type": "array", "items": { "type": "string" } } } },
+      "RuntimeLimits": { "type": "object", "required": ["max_timeout_ms", "max_memory_mb", "max_cpu_percent"], "properties": { "max_timeout_ms": { "type": "integer" }, "max_memory_mb": { "type": "integer" }, "max_cpu_percent": { "type": "integer" } } },
+      "CreateAPIKeyRequest": { "type": "object", "required": ["name", "scopes"], "properties": { "name": { "type": "string" }, "scopes": { "type": "array", "items": { "type": "string", "enum": ["invoke", "manage", "admin"] }, "uniqueItems": true } } },
+      "APIKey": { "type": "object", "required": ["id", "name", "scopes", "key_prefix", "created_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string", "description": "Present in the create response." }, "name": { "type": "string" }, "scopes": { "type": "array", "items": { "type": "string" } }, "key_prefix": { "type": "string" }, "key": { "type": "string", "pattern": "^vl_", "description": "Present only in the create response." }, "expires_at": { "type": ["string", "null"], "format": "date-time" }, "last_used_at": { "type": ["string", "null"], "format": "date-time" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "TenantMember": { "type": "object", "required": ["tenant_id", "user_id", "email", "role"], "properties": { "tenant_id": { "type": "string" }, "user_id": { "type": "string" }, "email": { "type": "string", "format": "email" }, "role": { "type": "string", "enum": ["invoke", "manage", "admin"] }, "invited_at": { "type": "string", "format": "date-time" } } },
+      "InviteMemberRequest": { "type": "object", "required": ["email"], "properties": { "email": { "type": "string", "format": "email" }, "role": { "type": "string", "enum": ["invoke", "manage", "admin"], "default": "manage" } } },
+      "InviteMemberResponse": { "type": "object", "required": ["invite_token", "expires_at"], "properties": { "invite_token": { "type": "string" }, "expires_at": { "type": "string", "format": "date-time" } } },
+      "Invite": { "type": "object", "required": ["id", "tenant_id", "email", "role", "expires_at", "created_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "email": { "type": "string", "format": "email" }, "role": { "type": "string", "enum": ["invoke", "manage", "admin"] }, "expires_at": { "type": "string", "format": "date-time" }, "accepted_at": { "type": ["string", "null"], "format": "date-time" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "TenantPlan": { "type": "object", "required": ["plan", "valid", "features"], "properties": { "plan": { "type": "string" }, "valid": { "type": "boolean" }, "features": { "type": "array", "items": { "type": "string" } } } },
+      "UsageSummary": { "type": "object", "required": ["tenant_id", "window", "total_invocations", "error_rate", "avg_duration_ms", "top_snippets"], "properties": { "tenant_id": { "type": "string" }, "window": { "type": "string" }, "total_invocations": { "type": "integer" }, "error_rate": { "type": "number" }, "avg_duration_ms": { "type": "number" }, "top_snippets": { "type": "array", "items": { "type": "object", "properties": { "snippet_id": { "type": "string" }, "name": { "type": "string" }, "invocations": { "type": "integer" }, "p95_ms": { "type": "number" } } } } } },
+      "AuditEntry": { "type": "object", "required": ["id", "tenant_id", "actor_id", "actor_type", "action", "created_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "actor_id": { "type": "string" }, "actor_type": { "type": "string" }, "action": { "type": "string" }, "resource_id": { "type": "string" }, "metadata": { "type": "object", "additionalProperties": true }, "created_at": { "type": "string", "format": "date-time" } } },
+      "Connection": { "type": "object", "required": ["id", "tenant_id", "provider", "alias", "provider_config_key", "nango_connection_id", "created_at", "updated_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "provider": { "type": "string" }, "alias": { "type": "string" }, "provider_config_key": { "type": "string" }, "credential_profile_id": { "type": ["string", "null"] }, "nango_connection_id": { "type": "string" }, "display_name": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "CreateConnectionSessionRequest": { "type": "object", "required": ["provider"], "properties": { "provider": { "type": "string" }, "alias": { "type": "string", "default": "default" }, "credential_profile_id": { "type": "string" } } },
+      "ConnectionSession": { "type": "object", "required": ["session_token", "connect_url", "api_url", "credential_profile_id", "alias"], "properties": { "session_token": { "type": "string" }, "connect_url": { "type": "string", "format": "uri" }, "api_url": { "type": "string", "format": "uri" }, "credential_profile_id": { "type": "string" }, "alias": { "type": "string" } } },
+      "RecordConnectionRequest": { "type": "object", "required": ["provider"], "properties": { "provider": { "type": "string" }, "display_name": { "type": "string" }, "alias": { "type": "string", "default": "default" }, "credential_profile_id": { "type": "string" } } },
+      "ConnectionField": { "type": "object", "required": ["type", "title"], "properties": { "type": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" }, "example": { "type": "string" }, "optional": { "type": "boolean" }, "automated": { "type": "boolean" }, "prefix": { "type": "string" } } },
+      "IntegrationProvider": { "type": "object", "required": ["unique_key", "name", "auth_mode", "categories"], "properties": { "unique_key": { "type": "string" }, "name": { "type": "string" }, "auth_mode": { "type": "string" }, "categories": { "type": "array", "items": { "type": "string" } }, "default_scopes": { "type": "array", "items": { "type": "string" } }, "docs": { "type": "string", "format": "uri" }, "logo_url": { "type": "string" }, "connection_config": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/ConnectionField" } }, "credentials": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/ConnectionField" } } } },
+      "IntegrationProfile": { "type": "object", "required": ["id", "tenant_id", "provider", "alias", "name", "nango_provider_config_key", "credentials_type", "is_default", "created_at", "updated_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "provider": { "type": "string" }, "alias": { "type": "string" }, "name": { "type": "string" }, "nango_provider_config_key": { "type": "string" }, "credentials_type": { "type": "string" }, "oauth_scopes": { "type": "string" }, "is_default": { "type": "boolean" }, "connected": { "type": "boolean", "description": "Present in list responses." }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "ConfigureIntegrationRequest": { "type": "object", "required": ["provider"], "properties": { "provider": { "type": "string" }, "alias": { "type": "string", "default": "default" }, "name": { "type": "string" }, "credentials_type": { "type": "string" }, "credentials": { "type": "object", "additionalProperties": { "type": "string" } }, "oauth_client_id": { "type": "string" }, "oauth_client_secret": { "type": "string", "format": "password" }, "oauth_scopes": { "type": "string" }, "is_default": { "type": "boolean" } } },
+      "ProviderDocs": { "type": "object", "additionalProperties": true },
+      "CreateSnippetRequest": { "type": "object", "required": ["name", "language"], "properties": { "name": { "type": "string" }, "language": { "type": "string", "enum": ["bun", "python"] } } },
+      "Snippet": { "type": "object", "required": ["id", "tenant_id", "name", "slug", "language", "created_at", "created_by"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "name": { "type": "string" }, "slug": { "type": "string" }, "language": { "type": "string", "enum": ["bun", "python"] }, "created_at": { "type": "string", "format": "date-time" }, "created_by": { "type": "string" } } },
+      "CreateVersionRequest": { "type": "object", "required": ["code"], "properties": { "code": { "type": "string" }, "input_schema": { "type": "string", "description": "JSON Schema encoded as a string.", "default": "{}" }, "output_schema": { "type": "string", "description": "JSON Schema encoded as a string.", "default": "{}" }, "timeout_ms": { "type": "integer", "minimum": 1, "default": 60000 }, "max_memory_mb": { "type": "integer", "minimum": 1, "default": 200 }, "max_cpu_percent": { "type": "integer", "minimum": 1, "default": 10 } } },
+      "SnippetVersion": { "type": "object", "required": ["id", "snippet_id", "version_number", "code", "status", "created_at"], "properties": { "id": { "type": "string" }, "snippet_id": { "type": "string" }, "version_number": { "type": "integer" }, "code": { "type": "string" }, "input_schema": { "type": "string" }, "output_schema": { "type": "string" }, "status": { "type": "string" }, "created_by": { "type": "string" }, "timeout_ms": { "type": "integer" }, "max_memory_mb": { "type": "integer" }, "max_cpu_percent": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "SnippetEnvironment": { "type": "object", "required": ["snippet_id", "env", "min_instances", "canary_pct"], "properties": { "snippet_id": { "type": "string" }, "env": { "$ref": "#/components/schemas/Environment" }, "active_version_id": { "type": ["string", "null"] }, "active_version_number": { "type": ["integer", "null"] }, "min_instances": { "type": "integer" }, "canary_version_id": { "type": ["string", "null"] }, "canary_pct": { "type": "integer", "minimum": 0, "maximum": 100 } } },
+      "SetCanaryRequest": { "type": "object", "required": ["version_id", "percent"], "properties": { "version_id": { "type": "string" }, "percent": { "type": "integer", "minimum": 0, "maximum": 100 } } },
+      "Secret": { "type": "object", "required": ["id", "tenant_id", "name", "is_secret", "environments", "created_at", "updated_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "snippet_id": { "type": ["string", "null"] }, "name": { "type": "string" }, "is_secret": { "type": "boolean" }, "value": { "type": ["string", "null"], "description": "Returned only for variables (`is_secret=false`), never credentials." }, "environments": { "type": "array", "items": { "$ref": "#/components/schemas/Environment" } }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "CreateSecretRequest": { "type": "object", "required": ["name", "value"], "properties": { "name": { "type": "string" }, "value": { "type": "string", "format": "password" }, "is_secret": { "type": "boolean", "default": true }, "snippet_id": { "type": ["string", "null"] }, "environments": { "type": "array", "items": { "$ref": "#/components/schemas/Environment" } } } },
+      "UpdateSecretRequest": { "type": "object", "minProperties": 1, "properties": { "name": { "type": "string" }, "value": { "type": "string", "format": "password" } } },
+      "CreateGitIntegrationRequest": { "type": "object", "required": ["provider", "repo_url"], "properties": { "provider": { "type": "string" }, "repo_url": { "type": "string", "format": "uri" } } },
+      "GitIntegration": { "type": "object", "required": ["id", "tenant_id", "snippet_id", "provider", "repo_url", "created_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "snippet_id": { "type": "string" }, "provider": { "type": "string", "enum": ["github", "gitlab"] }, "repo_url": { "type": "string", "format": "uri" }, "secret": { "type": "string", "description": "Present only in the create response." }, "webhook_url": { "type": "string", "format": "uri-reference", "description": "Present only in the create response." }, "created_at": { "type": "string", "format": "date-time" } } },
+      "GitWebhookPayload": { "type": "object", "required": ["ref", "snippet_code"], "properties": { "ref": { "type": "string", "examples": ["refs/heads/main"] }, "snippet_code": { "type": "string" } } },
+      "GitWebhookResult": { "type": "object", "required": ["snippet_id", "version_number", "env", "ref", "status"], "properties": { "snippet_id": { "type": "string" }, "version_number": { "type": "integer" }, "env": { "$ref": "#/components/schemas/Environment" }, "ref": { "type": "string" }, "status": { "type": "string", "enum": ["draft", "published", "archived"] } } },
+      "Invocation": { "type": "object", "required": ["id", "snippet_id", "version_id", "environment", "tenant_id", "status", "input_payload", "output", "stderr", "duration_ms", "peak_memory_mb", "cpu_ms", "created_at", "invoke_mode"], "properties": { "id": { "type": "string" }, "snippet_id": { "type": "string" }, "version_id": { "type": "string" }, "environment": { "$ref": "#/components/schemas/Environment" }, "tenant_id": { "type": "string" }, "status": { "$ref": "#/components/schemas/InvocationStatus" }, "input_payload": { "type": "string", "description": "Raw JSON encoded as a string." }, "input_ref": { "type": "string" }, "output": { "type": "string", "description": "Raw JSON encoded as a string." }, "output_ref": { "type": "string" }, "error": { "type": "string" }, "stderr": { "type": "string" }, "stderr_ref": { "type": "string" }, "duration_ms": { "type": "integer" }, "peak_memory_mb": { "type": "integer" }, "cpu_ms": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "completed_at": { "type": ["string", "null"], "format": "date-time" }, "callback_url": { "type": "string", "format": "uri" }, "invoke_mode": { "type": "string", "enum": ["sync", "async", "stream"] }, "payload_state": { "type": "string", "enum": ["legacy", "pending", "stored", "failed", "purged"] } } },
+      "InvocationResult": { "type": "object", "required": ["invocation_id", "status"], "properties": { "invocation_id": { "type": "string" }, "status": { "$ref": "#/components/schemas/InvocationStatus" }, "output": {}, "error": { "type": "string" }, "stderr": { "type": "string" }, "duration_ms": { "type": "integer" } } },
+      "AsyncInvocation": { "type": "object", "required": ["invocation_id", "status", "status_url"], "properties": { "invocation_id": { "type": "string" }, "status": { "$ref": "#/components/schemas/InvocationStatus" }, "status_url": { "type": "string", "format": "uri-reference" } } },
+      "ReplayResult": { "type": "object", "required": ["original_invocation_id", "replay_invocation_id", "status", "duration_ms"], "properties": { "original_invocation_id": { "type": "string" }, "replay_invocation_id": { "type": "string" }, "status": { "$ref": "#/components/schemas/InvocationStatus" }, "duration_ms": { "type": "integer" }, "error": { "type": "string" } } },
+      "InvocationLogSummary": { "type": "object", "required": ["id", "snippet_id", "version_id", "environment", "tenant_id", "status", "duration_ms", "peak_memory_mb", "cpu_ms", "created_at", "invoke_mode", "payload_state"], "properties": { "id": { "type": "string" }, "snippet_id": { "type": "string" }, "version_id": { "type": "string" }, "environment": { "$ref": "#/components/schemas/Environment" }, "tenant_id": { "type": "string" }, "status": { "$ref": "#/components/schemas/InvocationStatus" }, "duration_ms": { "type": "integer" }, "peak_memory_mb": { "type": "integer" }, "cpu_ms": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "completed_at": { "type": ["string", "null"], "format": "date-time" }, "invoke_mode": { "type": "string", "enum": ["sync", "async", "stream"] }, "payload_state": { "type": "string", "enum": ["legacy", "pending", "stored", "failed", "purged"] } } },
+      "LogResult": { "type": "object", "required": ["snippet_id", "items"], "properties": { "snippet_id": { "type": "string" }, "items": { "type": "array", "items": { "$ref": "#/components/schemas/InvocationLogSummary" } }, "filters": { "type": "object", "additionalProperties": true } } },
+      "SnippetMetrics": { "type": "object", "additionalProperties": true },
+      "EmbedToken": { "type": "object", "required": ["id", "tenant_id", "expires_at", "created_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "allowed_snippet_ids": { "type": "array", "items": { "type": "string" } }, "expires_at": { "type": "string", "format": "date-time" }, "revoked_at": { "type": ["string", "null"], "format": "date-time" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "CreateEmbedTokenRequest": { "type": "object", "properties": { "tenant_slug": { "type": "string" }, "snippet_ids": { "type": "array", "items": { "type": "string" } }, "ttl_seconds": { "type": "integer", "minimum": 1, "default": 3600 } } },
+      "CreateEmbedTokenResponse": { "type": "object", "required": ["id", "token", "expires_at"], "properties": { "id": { "type": "string" }, "token": { "type": "string", "pattern": "^et_" }, "expires_at": { "type": "string", "format": "date-time" } } },
+      "EmbedBootstrap": { "type": "object", "required": ["tenant", "embed"], "properties": { "tenant": { "type": "object", "required": ["id", "slug", "name", "branding"], "properties": { "id": { "type": "string" }, "slug": { "type": "string" }, "name": { "type": "string" }, "branding": { "$ref": "#/components/schemas/Branding" } } }, "embed": { "type": "object", "required": ["token_id", "expires_at", "allowed_snippet_ids", "capabilities"], "properties": { "token_id": { "type": "string" }, "expires_at": { "type": "string", "format": "date-time" }, "allowed_snippet_ids": { "type": "array", "items": { "type": "string" } }, "capabilities": { "type": "object", "additionalProperties": { "type": "boolean" } } } } } },
+      "EmbedSnippetDetail": { "type": "object", "required": ["snippet", "versions", "environments"], "properties": { "snippet": { "$ref": "#/components/schemas/Snippet" }, "versions": { "type": "array", "items": { "$ref": "#/components/schemas/SnippetVersion" } }, "environments": { "type": "object", "properties": { "dev": { "$ref": "#/components/schemas/SnippetEnvironment" }, "staging": { "$ref": "#/components/schemas/SnippetEnvironment" }, "prod": { "$ref": "#/components/schemas/SnippetEnvironment" } } } } }
+    }
+  }
+}

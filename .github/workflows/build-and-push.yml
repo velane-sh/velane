@@ -6,6 +6,13 @@ on:
       - main
 
 jobs:
+  tests:
+    uses: ./.github/workflows/ci.yml
+
   build-and-push:
+    needs: tests
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/_build-images.yml
     secrets: inherit

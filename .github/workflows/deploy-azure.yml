@@ -1,0 +1,97 @@
+name: Deploy to Azure
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Docker Images", "Release"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (for example sha-abc1234). Defaults to the current commit SHA."
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-azure
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    if: >
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       ((github.event.workflow_run.name == 'Build and Push Docker Images' &&
+         github.event.workflow_run.event == 'push') ||
+        (github.event.workflow_run.name == 'Release' &&
+         github.event.workflow_run.event == 'workflow_dispatch')))
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Resolve image tag
+        id: image
+        env:
+          DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
+          SOURCE_WORKFLOW: ${{ github.event.workflow_run.name }}
+        run: |
+          if [ -n "$REQUESTED_TAG" ]; then
+            tag="$REQUESTED_TAG"
+          elif [ "$SOURCE_WORKFLOW" = "Release" ]; then
+            release_tag="$(git tag --points-at "$DEPLOY_SHA" --list 'v[0-9]*' --sort=-version:refname | head -n 1)"
+            if [ -z "$release_tag" ]; then
+              echo "No release tag found for $DEPLOY_SHA" >&2
+              exit 1
+            fi
+            tag="${release_tag#v}"
+          else
+            tag="sha-${DEPLOY_SHA:0:7}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Deploying Velane images tagged: $tag"
+
+      - name: Log in to Azure with GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy images to the Azure VM
+        env:
+          DEPLOY_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          az vm run-command invoke \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.AZURE_VM_NAME }}" \
+            --command-id RunShellScript \
+            --scripts "
+              set -eu
+              cd /opt/velane
+              sudo sed -i \
+                -e 's#^CONTROL_PLANE_IMAGE=.*#CONTROL_PLANE_IMAGE=ghcr.io/${{ github.repository_owner }}/velane-control-plane:${DEPLOY_TAG}#' \
+                -e 's#^BUN_EXECUTOR_IMAGE=.*#BUN_EXECUTOR_IMAGE=ghcr.io/${{ github.repository_owner }}/velane-bun-executor:${DEPLOY_TAG}#' \
+                -e 's#^PYTHON_EXECUTOR_IMAGE=.*#PYTHON_EXECUTOR_IMAGE=ghcr.io/${{ github.repository_owner }}/velane-python-executor:${DEPLOY_TAG}#' \
+                -e 's#^ADMIN_IMAGE=.*#ADMIN_IMAGE=ghcr.io/${{ github.repository_owner }}/velane-admin:${DEPLOY_TAG}#' \
+                -e 's#^MCP_SERVER_IMAGE=.*#MCP_SERVER_IMAGE=ghcr.io/${{ github.repository_owner }}/velane-mcp-server:${DEPLOY_TAG}#' \
+                /opt/velane/.env
+              sudo docker compose pull control-plane bun-executor python-executor admin mcp-server
+              sudo docker compose up -d --no-deps control-plane bun-executor python-executor admin mcp-server
+              sudo docker image prune -f
+            "
+
+      - name: Verify public endpoints
+        run: |
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 https://app.velane.sh/ >/dev/null
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 https://api.velane.sh/healthz >/dev/null
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 https://mcp.velane.sh/healthz >/dev/null

@@ -38,7 +38,15 @@ tofu output update_kubeconfig_command   # run this to configure kubectl
 tofu output acm_certificate_arn         # paste into k8s/terraform.tfvars
 tofu output acm_dns_validation_records  # add these to your DNS
 tofu output setup_alb_controller_command
+tofu output object_storage_bucket
+tofu output object_storage_role_arn
 ```
+
+The EKS module creates a private, encrypted, versioned S3 bucket and an IRSA
+role for the control plane. Pass `object_storage_bucket` and
+`object_storage_role_arn` into the corresponding values shown in
+`k8s/terraform.tfvars.example`. Workflow source and invocation payloads are
+then stored under tenant-specific prefixes in this shared bucket.
 
 ---
 
@@ -225,9 +233,9 @@ This updates image tags in `terraform.tfvars`, refreshes kubeconfig, and runs `t
 
 ## CI/CD (GitHub Actions)
 
-Pushes to `main` build Docker images tagged `latest` and `sha-<commit>`, then `.github/workflows/deploy-aws.yml` runs OpenTofu against this stack on EKS.
+Pushes to `main` build Docker images tagged `latest` and `sha-<commit>`. EKS deployment remains a manual OpenTofu operation using the steps below.
 
-Semver tags (`0.7.x`) are created only via **Actions → Release → Run workflow** (patch/minor/major bump). That workflow builds images, publishes grouped release notes on GitHub, and triggers deploy.
+Semver tags are created only via **Actions → Release → Run workflow** (patch/minor/major bump). That workflow builds versioned images and publishes grouped release notes on GitHub.
 
 ### One-time setup
 
@@ -250,9 +258,9 @@ Semver tags (`0.7.x`) are created only via **Actions → Release → Run workflo
    | `TF_STATE_LOCK_TABLE` | DynamoDB table from `backend.hcl` |
    | `K8S_TFVARS` | Full contents of your local `terraform.tfvars` |
 
-3. **Manual deploy** — Actions → *Deploy to AWS* → *Run workflow* (optional `image_tag` override).
+3. **Manual deploy** — run the local deployment command above or apply the OpenTofu stack directly.
 
-Image tags default to an exact semver tag on the commit when one exists (after a Release), otherwise `sha-<commit>`.
+Pin `control_plane_image`, executor images, and frontend images to the desired semantic-version or `sha-<commit>` tag.
 
 ---
 

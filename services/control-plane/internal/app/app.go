@@ -14,6 +14,7 @@ import (
 	"github.com/abskrj/velane/services/control-plane/internal/executor/remote"
 	"github.com/abskrj/velane/services/control-plane/internal/license"
 	"github.com/abskrj/velane/services/control-plane/internal/nango"
+	"github.com/abskrj/velane/services/control-plane/internal/objectstore"
 	"github.com/abskrj/velane/services/control-plane/internal/observability"
 	"github.com/abskrj/velane/services/control-plane/internal/platformlibs"
 	"github.com/abskrj/velane/services/control-plane/internal/scheduler"
@@ -64,6 +65,25 @@ func Bootstrap(ctx context.Context, log *zap.Logger) (*App, error) {
 		return nil, fmt.Errorf("connect postgres: %w", err)
 	}
 	log.Info("postgres connected and migrations applied")
+
+	if cfg.ObjectStorageDriver == "" {
+		log.Warn("object storage is not configured; legacy PostgreSQL payload storage remains enabled")
+	} else {
+		objects, storageErr := objectstore.New(ctx, objectstore.Config{
+			Driver: cfg.ObjectStorageDriver, Bucket: cfg.ObjectStorageBucket, Prefix: cfg.ObjectStoragePrefix,
+			S3Region: cfg.ObjectStorageS3Region, S3Endpoint: cfg.ObjectStorageS3Endpoint,
+			S3ForcePathStyle:      cfg.ObjectStorageS3ForcePathStyle,
+			AzureAccountURL:       cfg.ObjectStorageAzureAccountURL,
+			AzureConnectionString: cfg.ObjectStorageAzureConnectionString,
+		})
+		if storageErr != nil {
+			return nil, fmt.Errorf("configure object storage: %w", storageErr)
+		}
+		store.SetObjectStore(objects)
+		store.ConfigureObjectMaintenance(cfg.ObjectGCGracePeriod, cfg.InvocationRetention)
+		log.Info("object storage configured", zap.String("driver", cfg.ObjectStorageDriver))
+		go runObjectStorageMaintenance(ctx, store, log)
+	}
 
 	platLibs, err := platformlibs.Load()
 	if err != nil {
@@ -196,6 +216,21 @@ func runStaleInvocationReaper(ctx context.Context, store *postgres.Store, log *z
 			if n > 0 {
 				log.Info("reaper: marked stale invocations as timed out", zap.Int64("count", n))
 			}
+		}
+	}
+}
+
+func runObjectStorageMaintenance(ctx context.Context, store *postgres.Store, log *zap.Logger) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		if err := store.MaintainObjectStorage(ctx); err != nil && ctx.Err() == nil {
+			log.Warn("object storage maintenance failed", zap.Error(err))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 		}
 	}
 }

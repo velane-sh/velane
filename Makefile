@@ -1,4 +1,4 @@
-.PHONY: up down build logs seed tidy copy-platform-libs test-platform-libs help
+.PHONY: up down build logs seed tidy copy-platform-libs test-platform-libs openapi-check help
 
 ## tidy: run go mod tidy to generate/update go.sum (required before first build)
 tidy:
@@ -45,6 +45,10 @@ test-platform-libs:
 	cd platform-libraries/bun && bun test
 	@echo "--- Python tests ---"
 	cd platform-libraries/python && python3 -m pytest -v
+
+## openapi-check: validate the OpenAPI document and verify it matches the chi router
+openapi-check:
+	cd services/control-plane && go test ./internal/api -run TestOpenAPI -count=1
 
 ## setup-nango: one-time Nango account setup. Run once after make up on a fresh stack.
 ##              Prints NANGO_SECRET_KEY and NANGO_PUBLIC_KEY — store in your secrets manager.

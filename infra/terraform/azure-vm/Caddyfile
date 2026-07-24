@@ -1,0 +1,31 @@
+{$ADMIN_HOST} {
+  reverse_proxy admin:80
+}
+
+{$API_HOST} {
+  reverse_proxy control-plane:8080
+}
+
+{$MCP_HOST} {
+  reverse_proxy mcp-server:8090
+}
+
+{$NANGO_CONNECT_HOST} {
+  reverse_proxy admin:3009
+}
+
+{$NANGO_API_HOST} {
+  reverse_proxy admin:3003
+}
+
+{$LICENSE_HOST} {
+  reverse_proxy license-server:8070
+}
+
+{$TELEMETRY_HOST} {
+  handle /tm* {
+    reverse_proxy license-server:8070
+  }
+
+  respond 404
+}

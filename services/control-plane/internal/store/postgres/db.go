@@ -4,7 +4,9 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"time"
 
+	"github.com/abskrj/velane/services/control-plane/internal/objectstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -65,9 +67,24 @@ var migrationSQL18 string
 //go:embed migrations/019_tenant_license_key.sql
 var migrationSQL19 string
 
+//go:embed migrations/020_object_storage.sql
+var migrationSQL20 string
+
 // Store wraps a pgxpool.Pool and provides all database operations.
 type Store struct {
-	pool *pgxpool.Pool
+	pool                *pgxpool.Pool
+	objects             objectstore.Store
+	objectGCGrace       time.Duration
+	invocationRetention time.Duration
+}
+
+func (s *Store) SetObjectStore(objects objectstore.Store) {
+	s.objects = objects
+}
+
+func (s *Store) ConfigureObjectMaintenance(gcGrace, invocationRetention time.Duration) {
+	s.objectGCGrace = gcGrace
+	s.invocationRetention = invocationRetention
 }
 
 // New connects to Postgres using the provided DSN, runs the embedded migration
@@ -83,7 +100,7 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 		return nil, fmt.Errorf("postgres ping: %w", err)
 	}
 
-	for i, sql := range []string{migrationSQL1, migrationSQL2, migrationSQL3, migrationSQL4, migrationSQL5, migrationSQL6, migrationSQL7, migrationSQL8, migrationSQL9, migrationSQL10, migrationSQL11, migrationSQL12, migrationSQL13, migrationSQL14, migrationSQL15, migrationSQL16, migrationSQL17, migrationSQL18, migrationSQL19} {
+	for i, sql := range []string{migrationSQL1, migrationSQL2, migrationSQL3, migrationSQL4, migrationSQL5, migrationSQL6, migrationSQL7, migrationSQL8, migrationSQL9, migrationSQL10, migrationSQL11, migrationSQL12, migrationSQL13, migrationSQL14, migrationSQL15, migrationSQL16, migrationSQL17, migrationSQL18, migrationSQL19, migrationSQL20} {
 		if _, err := pool.Exec(ctx, sql); err != nil {
 			pool.Close()
 			return nil, fmt.Errorf("running migration %d: %w", i+1, err)
@@ -97,4 +114,3 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 func (s *Store) Close() {
 	s.pool.Close()
 }
-

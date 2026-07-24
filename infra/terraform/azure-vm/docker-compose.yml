@@ -1,0 +1,118 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      ADMIN_HOST: ${ADMIN_HOST}
+      API_HOST: ${API_HOST}
+      MCP_HOST: ${MCP_HOST}
+      NANGO_CONNECT_HOST: ${NANGO_CONNECT_HOST}
+      NANGO_API_HOST: ${NANGO_API_HOST}
+      LICENSE_HOST: ${LICENSE_HOST}
+      TELEMETRY_HOST: ${TELEMETRY_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - admin
+      - control-plane
+      - mcp-server
+
+  nango:
+    image: ${NANGO_IMAGE}
+    restart: unless-stopped
+    environment:
+      NANGO_DATABASE_URL: ${NANGO_DATABASE_URL}
+      SERVER_PORT: "3003"
+      NANGO_SERVER_URL: ${NANGO_API_URL}
+      NANGO_ENCRYPTION_KEY: ${NANGO_ENCRYPTION_KEY}
+      NANGO_SECRET_KEY_DEV: ${NANGO_SECRET_KEY}
+      NANGO_SECRET_KEY: ${NANGO_SECRET_KEY}
+      NANGO_PUBLIC_KEY: ${NANGO_PUBLIC_KEY}
+      NANGO_WEBHOOK_SECRET: ${NANGO_WEBHOOK_SECRET}
+      FLAG_SERVE_CONNECT_UI: "true"
+      FLAG_API_RATE_LIMIT_ENABLED: "false"
+      NANGO_CONNECT_UI_PORT: "3009"
+      NANGO_PUBLIC_CONNECT_URL: ${NANGO_CONNECT_URL}
+      TELEMETRY: "false"
+
+  bun-executor:
+    image: ${BUN_EXECUTOR_IMAGE}
+    restart: unless-stopped
+    security_opt:
+      - seccomp=./seccomp-executor.json
+
+  python-executor:
+    image: ${PYTHON_EXECUTOR_IMAGE}
+    restart: unless-stopped
+    security_opt:
+      - seccomp=./seccomp-executor.json
+
+  control-plane:
+    image: ${CONTROL_PLANE_IMAGE}
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      BUN_EXECUTOR_URL: http://bun-executor:8080
+      PYTHON_EXECUTOR_URL: http://python-executor:8080
+      WORKER_COUNT: ${WORKER_COUNT}
+      EXECUTOR_TYPE: process
+      INTERNAL_PROXY_URL: http://control-plane:8080
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      NANGO_INTERNAL_URL: http://nango:3003
+      NANGO_CONNECT_URL: ${NANGO_CONNECT_URL}
+      NANGO_API_URL: ${NANGO_API_URL}
+      NANGO_SECRET_KEY: ${NANGO_SECRET_KEY}
+      NANGO_PUBLIC_KEY: ${NANGO_PUBLIC_KEY}
+      NANGO_WEBHOOK_SECRET: ${NANGO_WEBHOOK_SECRET}
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID}
+      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET}
+      OBJECT_STORAGE_DRIVER: ${OBJECT_STORAGE_DRIVER}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET}
+      OBJECT_STORAGE_AZURE_ACCOUNT_URL: ${OBJECT_STORAGE_AZURE_ACCOUNT_URL}
+      OBJECT_GC_GRACE_PERIOD: ${OBJECT_GC_GRACE_PERIOD}
+      INVOCATION_RETENTION: ${INVOCATION_RETENTION}
+    depends_on:
+      - nango
+      - bun-executor
+      - python-executor
+
+  mcp-server:
+    image: ${MCP_SERVER_IMAGE}
+    restart: unless-stopped
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8080
+      PORT: "8090"
+    depends_on:
+      - control-plane
+
+  admin:
+    image: ${ADMIN_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      - control-plane
+      - nango
+
+  license-server:
+    image: ${LICENSE_SERVER_IMAGE}
+    restart: unless-stopped
+    environment:
+      PORT: "8070"
+      DATABASE_URL: ${LICENSE_DATABASE_URL}
+      PRIVATE_KEY_PEM: ${LICENSE_PRIVATE_KEY_PEM}
+
+volumes:
+  caddy_data:
+  caddy_config:
