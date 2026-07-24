@@ -10,6 +10,12 @@ variable "name_prefix" {
   default     = "velane"
 }
 
+variable "velane_namespace" {
+  description = "Kubernetes namespace used by the Velane workload module."
+  type        = string
+  default     = "velane"
+}
+
 variable "cluster_name" {
   description = "Explicit EKS cluster name. Leave empty to derive one from name_prefix and region."
   type        = string

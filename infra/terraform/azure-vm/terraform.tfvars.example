@@ -1,0 +1,35 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location        = "westus"
+name_prefix     = "velane-prod"
+vm_size         = "Standard_D2s_v3"
+
+ssh_public_key   = "ssh-ed25519 AAAA... user@example"
+ssh_allowed_cidrs = ["203.0.113.10/32"]
+
+base_domain             = "velane.sh"
+admin_subdomain         = "app"
+api_subdomain           = "api"
+mcp_subdomain           = "mcp"
+nango_connect_subdomain = "connect"
+nango_api_subdomain     = "nango"
+
+redis_url            = "rediss://default:PASSWORD@HOST:PORT"
+encryption_key        = "REUSE_THE_EXISTING_64_CHARACTER_KEY"
+jwt_private_key_pem   = "REUSE_THE_EXISTING_PRIVATE_KEY"
+nango_encryption_key  = "REUSE_THE_EXISTING_NANGO_ENCRYPTION_KEY"
+nango_secret_key      = "REUSE_THE_EXISTING_NANGO_SECRET_KEY"
+nango_public_key      = "REUSE_THE_EXISTING_NANGO_PUBLIC_KEY"
+nango_webhook_secret  = "REUSE_THE_EXISTING_WEBHOOK_SECRET"
+
+license_server_image = "ghcr.io/abskrj/velane-cloud-server:sha-7763357"
+private_key_pem       = "REUSE_THE_EXISTING_LICENSING_SIGNING_KEY"
+ghcr_username         = "abskrj"
+ghcr_token            = "GHCR_READ_PACKAGES_TOKEN"
+
+# Keep GHCR image defaults or pin immutable sha-* tags for production.
+# control_plane_image = "ghcr.io/abskrj/velane-control-plane:sha-..."
+
+# Object payload retention is disabled by default. Examples: "720h" (30 days),
+# "2160h" (90 days). Deleted workflow objects are recoverable for seven days.
+invocation_retention   = "0"
+object_gc_grace_period = "168h"

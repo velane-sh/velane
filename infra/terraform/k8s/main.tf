@@ -16,8 +16,8 @@ locals {
   # Without one it listens on plain 80.
   tls_enabled = var.acm_certificate_arn != ""
 
-  alb_listen_ports     = local.tls_enabled ? "[{\"HTTP\":80},{\"HTTPS\":443}]" : "[{\"HTTP\":80}]"
-  public_scheme        = local.tls_enabled ? "https" : "http"
+  alb_listen_ports = local.tls_enabled ? "[{\"HTTP\":80},{\"HTTPS\":443}]" : "[{\"HTTP\":80}]"
+  public_scheme    = local.tls_enabled ? "https" : "http"
 
   # Nango URLs
   # When we deploy Nango ourselves, we point everything internally at the in-cluster service.
@@ -69,20 +69,32 @@ resource "kubernetes_secret_v1" "control_plane" {
   type = "Opaque"
 
   data = {
-    DATABASE_URL         = var.database_url
-    REDIS_URL            = var.redis_url
-    ENCRYPTION_KEY       = var.encryption_key
-    JWT_PRIVATE_KEY      = var.jwt_private_key_pem
-    BOOTSTRAP_EMAIL      = var.bootstrap_email
-    BOOTSTRAP_PASSWORD   = var.bootstrap_password
-    BOOTSTRAP_TENANT     = var.bootstrap_tenant
-    NANGO_SECRET_KEY     = var.nango_secret_key
-    NANGO_PUBLIC_KEY     = var.nango_public_key
-    NANGO_WEBHOOK_SECRET = var.nango_webhook_secret
-    GOOGLE_OAUTH_CLIENT_ID     = var.google_oauth_client_id
-    GOOGLE_OAUTH_CLIENT_SECRET = var.google_oauth_client_secret
-    GITHUB_OAUTH_CLIENT_ID     = var.github_oauth_client_id
-    GITHUB_OAUTH_CLIENT_SECRET = var.github_oauth_client_secret
+    DATABASE_URL                           = var.database_url
+    REDIS_URL                              = var.redis_url
+    ENCRYPTION_KEY                         = var.encryption_key
+    JWT_PRIVATE_KEY                        = var.jwt_private_key_pem
+    BOOTSTRAP_EMAIL                        = var.bootstrap_email
+    BOOTSTRAP_PASSWORD                     = var.bootstrap_password
+    BOOTSTRAP_TENANT                       = var.bootstrap_tenant
+    NANGO_SECRET_KEY                       = var.nango_secret_key
+    NANGO_PUBLIC_KEY                       = var.nango_public_key
+    NANGO_WEBHOOK_SECRET                   = var.nango_webhook_secret
+    GOOGLE_OAUTH_CLIENT_ID                 = var.google_oauth_client_id
+    GOOGLE_OAUTH_CLIENT_SECRET             = var.google_oauth_client_secret
+    GITHUB_OAUTH_CLIENT_ID                 = var.github_oauth_client_id
+    GITHUB_OAUTH_CLIENT_SECRET             = var.github_oauth_client_secret
+    OBJECT_STORAGE_AZURE_CONNECTION_STRING = var.object_storage_azure_connection_string
+    AWS_ACCESS_KEY_ID                      = var.object_storage_access_key_id
+    AWS_SECRET_ACCESS_KEY                  = var.object_storage_secret_access_key
+  }
+}
+
+resource "kubernetes_service_account_v1" "control_plane" {
+  metadata {
+    name        = "control-plane"
+    namespace   = local.namespace
+    labels      = local.default_labels
+    annotations = var.control_plane_service_account_annotations
   }
 }
 
@@ -236,6 +248,8 @@ resource "kubernetes_deployment_v1" "control_plane" {
       }
 
       spec {
+        service_account_name = kubernetes_service_account_v1.control_plane.metadata[0].name
+
         container {
           name              = "control-plane"
           image             = var.control_plane_image
@@ -291,6 +305,51 @@ resource "kubernetes_deployment_v1" "control_plane" {
           }
 
           env {
+            name  = "OBJECT_STORAGE_DRIVER"
+            value = var.object_storage_driver
+          }
+
+          env {
+            name  = "OBJECT_STORAGE_BUCKET"
+            value = var.object_storage_bucket
+          }
+
+          env {
+            name  = "OBJECT_STORAGE_PREFIX"
+            value = var.object_storage_prefix
+          }
+
+          env {
+            name  = "OBJECT_STORAGE_S3_REGION"
+            value = var.object_storage_s3_region
+          }
+
+          env {
+            name  = "OBJECT_STORAGE_S3_ENDPOINT"
+            value = var.object_storage_s3_endpoint
+          }
+
+          env {
+            name  = "OBJECT_STORAGE_S3_FORCE_PATH_STYLE"
+            value = tostring(var.object_storage_s3_force_path_style)
+          }
+
+          env {
+            name  = "OBJECT_STORAGE_AZURE_ACCOUNT_URL"
+            value = var.object_storage_azure_account_url
+          }
+
+          env {
+            name  = "OBJECT_GC_GRACE_PERIOD"
+            value = var.object_gc_grace_period
+          }
+
+          env {
+            name  = "INVOCATION_RETENTION"
+            value = var.invocation_retention
+          }
+
+          env {
             name = "DATABASE_URL"
             value_from {
               secret_key_ref {
@@ -306,6 +365,36 @@ resource "kubernetes_deployment_v1" "control_plane" {
               secret_key_ref {
                 name = kubernetes_secret_v1.control_plane.metadata[0].name
                 key  = "REDIS_URL"
+              }
+            }
+          }
+
+          env {
+            name = "OBJECT_STORAGE_AZURE_CONNECTION_STRING"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.control_plane.metadata[0].name
+                key  = "OBJECT_STORAGE_AZURE_CONNECTION_STRING"
+              }
+            }
+          }
+
+          env {
+            name = "AWS_ACCESS_KEY_ID"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.control_plane.metadata[0].name
+                key  = "AWS_ACCESS_KEY_ID"
+              }
+            }
+          }
+
+          env {
+            name = "AWS_SECRET_ACCESS_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.control_plane.metadata[0].name
+                key  = "AWS_SECRET_ACCESS_KEY"
               }
             }
           }

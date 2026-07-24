@@ -1,0 +1,33 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+
+write_files:
+  - path: /opt/velane/.env
+    owner: root:root
+    permissions: "0600"
+    encoding: b64
+    content: ${runtime_env_base64}
+  - path: /opt/velane/docker-compose.yml
+    owner: root:root
+    permissions: "0600"
+    encoding: b64
+    content: ${compose_base64}
+  - path: /opt/velane/Caddyfile
+    owner: root:root
+    permissions: "0644"
+    encoding: b64
+    content: ${caddy_base64}
+  - path: /opt/velane/seccomp-executor.json
+    owner: root:root
+    permissions: "0644"
+    encoding: b64
+    content: ${seccomp_base64}
+
+runcmd:
+  - [systemctl, enable, --now, docker]
+  - [sh, -c, 'set -a; . /opt/velane/.env; set +a; printf %s "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin']
+  - [docker, compose, --project-directory, /opt/velane, pull]
+  - [docker, compose, --project-directory, /opt/velane, up, -d]

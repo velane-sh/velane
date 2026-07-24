@@ -1,7 +1,12 @@
 package postgres
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +14,18 @@ import (
 	"github.com/abskrj/velane/services/control-plane/internal/ids"
 	"github.com/abskrj/velane/services/control-plane/internal/models"
 )
+
+type invocationPayloadObject struct {
+	FormatVersion int    `json:"format_version"`
+	InvocationID  string `json:"invocation_id"`
+	TenantID      string `json:"tenant_id"`
+	WorkflowID    string `json:"workflow_id"`
+	VersionID     string `json:"version_id"`
+	Input         string `json:"input"`
+	Output        string `json:"output,omitempty"`
+	Error         string `json:"error,omitempty"`
+	Stderr        string `json:"stderr,omitempty"`
+}
 
 // CreateInvocation inserts a new invocation record.
 // The status defaults to 'running' for sync invocations; callers that want
@@ -24,24 +41,93 @@ func (s *Store) CreateInvocationWithMode(
 	snippetID, versionID, environment, tenantID, inputPayload, invokeMode, callbackURL string,
 	status models.InvocationStatus,
 ) (*models.Invocation, error) {
+	invocationID := ids.New()
+	createdAt := time.Now().UTC()
+	payloadRef := ""
+	payloadState := "legacy"
+	var outbox []byte
+	storedInput := inputPayload
+	if s.objects != nil {
+		payloadRef = invocationObjectKey(tenantID, snippetID, invocationID, createdAt)
+		document := invocationPayloadObject{
+			FormatVersion: 1, InvocationID: invocationID, TenantID: tenantID,
+			WorkflowID: snippetID, VersionID: versionID, Input: inputPayload,
+		}
+		encoded, err := encodeInvocationPayload(document)
+		if err != nil {
+			return nil, err
+		}
+		storedInput = ""
+		// Keep a durable copy until the terminal result has been persisted.
+		// Workers can therefore finalize an invocation even when object storage
+		// becomes unavailable after scheduling.
+		outbox = encoded
+		if err := s.objects.Put(ctx, payloadRef, "application/json", "gzip", encoded); err != nil {
+			payloadState = "failed"
+		} else {
+			payloadState = "stored"
+		}
+	}
 	row := s.pool.QueryRow(ctx,
 		`INSERT INTO invocations
-		   (id, snippet_id, version_id, environment, tenant_id, status, input_payload, invoke_mode, callback_url)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		   (id, snippet_id, version_id, environment, tenant_id, status, input_payload, invoke_mode, callback_url,
+		    payload_ref, payload_state, payload_outbox, payload_retry_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12,
+		         CASE WHEN $11 = 'failed' THEN now() ELSE NULL END, $13)
 		 RETURNING id, snippet_id, version_id, environment, tenant_id, status,
 		           input_payload, input_ref, output, output_ref, error, stderr, stderr_ref, duration_ms, peak_memory_mb, cpu_ms,
 		           created_at, completed_at, callback_url, invoke_mode`,
-		ids.New(), snippetID, versionID, environment, tenantID, string(status), inputPayload, invokeMode, nullableString(callbackURL),
+		invocationID, snippetID, versionID, environment, tenantID, string(status), storedInput, invokeMode,
+		nullableString(callbackURL), payloadRef, payloadState, outbox, createdAt,
 	)
 	inv, err := scanInvocation(row)
 	if err != nil {
 		return nil, fmt.Errorf("CreateInvocationWithMode scan: %w", err)
 	}
+	inv.PayloadState = payloadState
+	inv.InputPayload = inputPayload
 	return inv, nil
 }
 
 // UpdateInvocationResult updates an invocation with the execution result.
 func (s *Store) UpdateInvocationResult(ctx context.Context, id string, status models.InvocationStatus, output, errMsg, stderr string, durationMs, peakMemoryMB, cpuMs int) error {
+	if s.objects != nil {
+		invocation, err := s.GetInvocation(ctx, id)
+		if err != nil {
+			return fmt.Errorf("load invocation payload: %w", err)
+		}
+		document := invocationPayloadObject{
+			FormatVersion: 1, InvocationID: invocation.ID, TenantID: invocation.TenantID,
+			WorkflowID: invocation.SnippetID, VersionID: invocation.VersionID,
+			Input: invocation.InputPayload, Output: output, Error: errMsg, Stderr: stderr,
+		}
+		encoded, err := encodeInvocationPayload(document)
+		if err != nil {
+			return err
+		}
+		payloadRef := invocationObjectKey(invocation.TenantID, invocation.SnippetID, invocation.ID, invocation.CreatedAt)
+		payloadState := "stored"
+		var outbox []byte
+		if err := s.objects.Put(ctx, payloadRef, "application/json", "gzip", encoded); err != nil {
+			payloadState, outbox = "failed", encoded
+		}
+		sum := sha256.Sum256(encoded)
+		_, err = s.pool.Exec(ctx,
+			`UPDATE invocations
+			 SET status = $2, output = NULL, error = NULL, stderr = NULL,
+			     duration_ms = $3, peak_memory_mb = $4, cpu_ms = $5, completed_at = now(),
+			     payload_ref = $6, payload_state = $7, payload_outbox = $8,
+			     payload_checksum = $9, payload_size = $10,
+			     payload_retry_at = CASE WHEN $8::bytea IS NULL THEN NULL ELSE now() END
+			 WHERE id = $1`,
+			id, string(status), durationMs, peakMemoryMB, cpuMs, payloadRef, payloadState, outbox,
+			hex.EncodeToString(sum[:]), len(encoded),
+		)
+		if err != nil {
+			return fmt.Errorf("UpdateInvocationResult object-backed: %w", err)
+		}
+		return nil
+	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE invocations
 		 SET status       = $2,
@@ -66,6 +152,35 @@ func (s *Store) UpdateInvocationResult(ctx context.Context, id string, status mo
 // mid-execution before finalizing. Returns the number of rows updated.
 func (s *Store) FailStaleInvocations(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoff := time.Now().Add(-olderThan)
+	if s.objects != nil {
+		rows, err := s.pool.Query(ctx,
+			`SELECT id FROM invocations
+			 WHERE status IN ('pending', 'running') AND created_at < $1`,
+			cutoff,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("query stale invocations: %w", err)
+		}
+		defer rows.Close()
+		var ids []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return 0, err
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		rows.Close()
+		for _, id := range ids {
+			if err := s.UpdateInvocationResult(ctx, id, models.InvocationTimeout, "", "execution did not complete", "", 0, 0, 0); err != nil {
+				return int64(len(ids)), err
+			}
+		}
+		return int64(len(ids)), nil
+	}
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE invocations
 		 SET status       = $1,
@@ -148,7 +263,7 @@ func (s *Store) ListInvocationLogs(ctx context.Context, snippetID string, filter
 	query := fmt.Sprintf(
 		`SELECT id, snippet_id, version_id, environment, tenant_id, status,
 		        input_payload, input_ref, output, output_ref, error, stderr, stderr_ref, duration_ms, peak_memory_mb, cpu_ms,
-		        created_at, completed_at, callback_url, invoke_mode
+		        created_at, completed_at, callback_url, invoke_mode, payload_state
 		 FROM invocations WHERE %s
 		 ORDER BY created_at DESC
 		 LIMIT $%d`,
@@ -165,7 +280,7 @@ func (s *Store) ListInvocationLogs(ctx context.Context, snippetID string, filter
 
 	var invocations []*models.Invocation
 	for rows.Next() {
-		inv, scanErr := scanInvocation(rows)
+		inv, scanErr := scanInvocationWithPayloadState(rows)
 		if scanErr != nil {
 			return nil, scanErr
 		}
@@ -244,15 +359,99 @@ func (s *Store) GetInvocation(ctx context.Context, id string) (*models.Invocatio
 	row := s.pool.QueryRow(ctx,
 		`SELECT id, snippet_id, version_id, environment, tenant_id, status,
 		        input_payload, input_ref, output, output_ref, error, stderr, stderr_ref, duration_ms, peak_memory_mb, cpu_ms,
-		        created_at, completed_at, callback_url, invoke_mode
+		        created_at, completed_at, callback_url, invoke_mode, payload_state
 		 FROM invocations WHERE id = $1`,
 		id,
 	)
-	inv, err := scanInvocation(row)
+	inv, err := scanInvocationWithPayloadState(row)
 	if err != nil {
 		return nil, fmt.Errorf("GetInvocation: %w", err)
 	}
-	return inv, nil
+	return s.hydrateInvocation(ctx, inv)
+}
+
+func invocationObjectKey(tenantID, workflowID, invocationID string, createdAt time.Time) string {
+	return fmt.Sprintf("tenants/%s/invocations/%s/%04d/%02d/%02d/%s.json.gz",
+		tenantID, workflowID, createdAt.Year(), createdAt.Month(), createdAt.Day(), invocationID)
+}
+
+func encodeInvocationPayload(document invocationPayloadObject) ([]byte, error) {
+	raw, err := json.Marshal(document)
+	if err != nil {
+		return nil, fmt.Errorf("marshal invocation payload: %w", err)
+	}
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+	if _, err := writer.Write(raw); err != nil {
+		return nil, fmt.Errorf("compress invocation payload: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("finish invocation payload compression: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func decodeInvocationPayload(encoded []byte) (*invocationPayloadObject, error) {
+	reader, err := gzip.NewReader(bytes.NewReader(encoded))
+	if err != nil {
+		return nil, fmt.Errorf("open invocation payload: %w", err)
+	}
+	defer reader.Close()
+	var document invocationPayloadObject
+	if err := json.NewDecoder(reader).Decode(&document); err != nil {
+		return nil, fmt.Errorf("decode invocation payload: %w", err)
+	}
+	return &document, nil
+}
+
+func (s *Store) hydrateInvocation(ctx context.Context, invocation *models.Invocation) (*models.Invocation, error) {
+	if s.objects == nil || invocation == nil {
+		return invocation, nil
+	}
+	var payloadRef, payloadState, checksum *string
+	var outbox []byte
+	if err := s.pool.QueryRow(ctx,
+		`SELECT payload_ref, payload_state, payload_outbox, payload_checksum FROM invocations WHERE id = $1`,
+		invocation.ID,
+	).Scan(&payloadRef, &payloadState, &outbox, &checksum); err != nil {
+		return nil, fmt.Errorf("get invocation payload reference: %w", err)
+	}
+	if payloadState != nil {
+		invocation.PayloadState = *payloadState
+	}
+	if invocation.PayloadState == "purged" {
+		return invocation, nil
+	}
+	var encoded []byte
+	var err error
+	if len(outbox) > 0 {
+		encoded = outbox
+	} else if payloadRef != nil && *payloadRef != "" {
+		encoded, err = s.objects.Get(ctx, *payloadRef)
+		if err != nil {
+			return nil, fmt.Errorf("load invocation payload object: %w", err)
+		}
+	} else {
+		return invocation, nil
+	}
+	if checksum != nil && *checksum != "" {
+		sum := sha256.Sum256(encoded)
+		if hex.EncodeToString(sum[:]) != *checksum {
+			return nil, fmt.Errorf("invocation payload object checksum mismatch")
+		}
+	}
+	document, err := decodeInvocationPayload(encoded)
+	if err != nil {
+		return nil, err
+	}
+	if document.InvocationID != invocation.ID || document.TenantID != invocation.TenantID {
+		return nil, fmt.Errorf("invocation payload object identity mismatch")
+	}
+	invocation.InputPayload = document.Input
+	invocation.Output = document.Output
+	invocation.Error = document.Error
+	invocation.Stderr = document.Stderr
+	return invocation, nil
 }
 
 // ListInvocationsBySnippet returns recent invocations for a snippet.
@@ -260,7 +459,7 @@ func (s *Store) ListInvocationsBySnippet(ctx context.Context, snippetID string, 
 	rows, err := s.pool.Query(ctx,
 		`SELECT id, snippet_id, version_id, environment, tenant_id, status,
 		        input_payload, input_ref, output, output_ref, error, stderr, stderr_ref, duration_ms, peak_memory_mb, cpu_ms,
-		        created_at, completed_at, callback_url, invoke_mode
+		        created_at, completed_at, callback_url, invoke_mode, payload_state
 		 FROM invocations WHERE snippet_id = $1
 		 ORDER BY created_at DESC LIMIT $2`,
 		snippetID, limit,
@@ -272,7 +471,7 @@ func (s *Store) ListInvocationsBySnippet(ctx context.Context, snippetID string, 
 
 	var invocations []*models.Invocation
 	for rows.Next() {
-		inv, err := scanInvocation(rows)
+		inv, err := scanInvocationWithPayloadState(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -325,6 +524,35 @@ func scanInvocation(s scannable) (*models.Invocation, error) {
 	if callbackURL != nil {
 		inv.CallbackURL = *callbackURL
 	}
+	return &inv, nil
+}
+
+func scanInvocationWithPayloadState(s scannable) (*models.Invocation, error) {
+	var inv models.Invocation
+	var inputRef, output, outputRef, errMsg, stderr, stderrRef, callbackURL *string
+	var durationMs, peakMemoryMB, cpuMs *int
+	if err := s.Scan(
+		&inv.ID, &inv.SnippetID, &inv.VersionID, &inv.Environment, &inv.TenantID,
+		&inv.Status, &inv.InputPayload,
+		&inputRef, &output, &outputRef, &errMsg, &stderr, &stderrRef,
+		&durationMs, &peakMemoryMB, &cpuMs,
+		&inv.CreatedAt, &inv.CompletedAt, &callbackURL, &inv.InvokeMode, &inv.PayloadState,
+	); err != nil {
+		return nil, err
+	}
+	if durationMs != nil {
+		inv.DurationMs = *durationMs
+	}
+	if peakMemoryMB != nil {
+		inv.PeakMemoryMB = *peakMemoryMB
+	}
+	if cpuMs != nil {
+		inv.CPUMs = *cpuMs
+	}
+	if callbackURL != nil {
+		inv.CallbackURL = *callbackURL
+	}
+	// List endpoints deliberately omit payload and log content.
 	return &inv, nil
 }
 

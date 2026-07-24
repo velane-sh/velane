@@ -1,0 +1,29 @@
+{
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "syscalls": [
+    {
+      "names": [
+        "ptrace", "mount", "umount2", "pivot_root", "kexec_load",
+        "kexec_file_load", "pevl_event_open", "unshare", "settimeofday",
+        "adjtimex", "clock_adjtime", "syslog", "sysfs", "nfsservctl",
+        "_sysctl", "uselib", "create_module", "init_module", "finit_module",
+        "delete_module", "iopl", "ioperm", "open_by_handle_at"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1
+    },
+    {
+      "names": ["clone"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "args": [
+        {
+          "index": 0,
+          "value": 268435456,
+          "op": "SCMP_CMP_MASKED_EQ",
+          "valueTwo": 268435456
+        }
+      ]
+    }
+  ]
+}

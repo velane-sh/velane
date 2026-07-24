@@ -9,22 +9,33 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
 
 // Config holds all runtime configuration loaded from environment variables.
 type Config struct {
-	DatabaseURL       string
-	BunExecutorURL    string
-	PythonExecutorURL string
-	Port              string
-	RedisURL          string // default: "localhost:6379"
-	WorkerCount       int    // default: 5
-	EncryptionKey     string // hex-encoded 32-byte AES key; generated ephemerally if empty
-	ClickHouseDSN     string // optional Phase 5 metrics store DSN
-	LogsBucket        string // optional Phase 5 object storage bucket for logs
-	ReplayBucket      string // optional Phase 5 object storage bucket for replay payloads
+	DatabaseURL                        string
+	BunExecutorURL                     string
+	PythonExecutorURL                  string
+	Port                               string
+	RedisURL                           string // default: "localhost:6379"
+	WorkerCount                        int    // default: 5
+	EncryptionKey                      string // hex-encoded 32-byte AES key; generated ephemerally if empty
+	ClickHouseDSN                      string // optional Phase 5 metrics store DSN
+	LogsBucket                         string // optional Phase 5 object storage bucket for logs
+	ReplayBucket                       string // optional Phase 5 object storage bucket for replay payloads
+	ObjectStorageDriver                string
+	ObjectStorageBucket                string
+	ObjectStoragePrefix                string
+	ObjectStorageS3Region              string
+	ObjectStorageS3Endpoint            string
+	ObjectStorageS3ForcePathStyle      bool
+	ObjectStorageAzureAccountURL       string
+	ObjectStorageAzureConnectionString string
+	ObjectGCGracePeriod                time.Duration
+	InvocationRetention                time.Duration
 
 	// JWT auth (Phase 9)
 	JWTPrivateKeyPEM string // RS256 private key PEM (env: JWT_PRIVATE_KEY); if empty, generate ephemeral key with warning
@@ -77,42 +88,52 @@ func Load() Config {
 	}
 
 	return Config{
-		DatabaseURL:             getEnv("DATABASE_URL", "postgres://velane:velane@localhost:5432/velane"),
-		BunExecutorURL:          getEnv("BUN_EXECUTOR_URL", "http://localhost:8081"),
-		PythonExecutorURL:       getEnv("PYTHON_EXECUTOR_URL", "http://localhost:8082"),
-		Port:                    getEnv("PORT", "8080"),
-		RedisURL:                getEnv("REDIS_URL", "localhost:6379"),
-		WorkerCount:             workerCount,
-		EncryptionKey:           os.Getenv("ENCRYPTION_KEY"),
-		ClickHouseDSN:           os.Getenv("CLICKHOUSE_DSN"),
-		LogsBucket:              os.Getenv("LOGS_BUCKET"),
-		ReplayBucket:            os.Getenv("REPLAY_BUCKET"),
-		PublicBaseURL:           getEnv("PUBLIC_BASE_URL", "http://localhost:8092"),
-		GoogleOAuthClientID:     os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
-		GoogleOAuthClientSecret: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
-		GitHubOAuthClientID:     os.Getenv("GITHUB_OAUTH_CLIENT_ID"),
-		GitHubOAuthClientSecret: os.Getenv("GITHUB_OAUTH_CLIENT_SECRET"),
-		BootstrapEmail:          os.Getenv("BOOTSTRAP_EMAIL"),
-		BootstrapPassword:       os.Getenv("BOOTSTRAP_PASSWORD"),
-		BootstrapTenant:         getEnv("BOOTSTRAP_TENANT", "default"),
-		JWTPrivateKeyPEM:        os.Getenv("JWT_PRIVATE_KEY"),
-		NangoInternalURL:        getEnv("NANGO_INTERNAL_URL", "http://nango:3003"),
-		NangoPublicURL:          getEnv("NANGO_PUBLIC_URL", "http://localhost:3003"),
-		NangoConnectURL:         getEnv("NANGO_CONNECT_URL", "http://localhost:3009"),
-		NangoApiURL:             getEnv("NANGO_API_URL", "http://localhost:3003"),
-		NangoSecretKey:          os.Getenv("NANGO_SECRET_KEY"),
-		NangoPublicKey:          os.Getenv("NANGO_PUBLIC_KEY"),
-		NangoWebhookSecret:      os.Getenv("NANGO_WEBHOOK_SECRET"),
-		MCPPublicURL:            strings.TrimSpace(os.Getenv("MCP_PUBLIC_URL")),
-		InternalProxyURL:        getEnv("INTERNAL_PROXY_URL", "http://control-plane:8080"),
-		LicenseKey:              os.Getenv("VELANE_LICENSE_KEY"),
-		CloudMode:               os.Getenv("VELANE_CLOUD") == "true",
-		ExecutorType:            getEnv("EXECUTOR_TYPE", "process"),
-		FirecrackerBinary:       getEnv("FIRECRACKER_BINARY", "/usr/local/bin/firecracker"),
-		FirecrackerJailerBinary: getEnv("FIRECRACKER_JAILER_BINARY", "/usr/local/bin/jailer"),
-		FirecrackerBunRootfs:    os.Getenv("FIRECRACKER_BUN_ROOTFS"),
-		FirecrackerPythonRootfs: os.Getenv("FIRECRACKER_PYTHON_ROOTFS"),
-		FirecrackerKernelImage:  os.Getenv("FIRECRACKER_KERNEL_IMAGE"),
+		DatabaseURL:                        getEnv("DATABASE_URL", "postgres://velane:velane@localhost:5432/velane"),
+		BunExecutorURL:                     getEnv("BUN_EXECUTOR_URL", "http://localhost:8081"),
+		PythonExecutorURL:                  getEnv("PYTHON_EXECUTOR_URL", "http://localhost:8082"),
+		Port:                               getEnv("PORT", "8080"),
+		RedisURL:                           getEnv("REDIS_URL", "localhost:6379"),
+		WorkerCount:                        workerCount,
+		EncryptionKey:                      os.Getenv("ENCRYPTION_KEY"),
+		ClickHouseDSN:                      os.Getenv("CLICKHOUSE_DSN"),
+		LogsBucket:                         os.Getenv("LOGS_BUCKET"),
+		ReplayBucket:                       os.Getenv("REPLAY_BUCKET"),
+		ObjectStorageDriver:                strings.TrimSpace(os.Getenv("OBJECT_STORAGE_DRIVER")),
+		ObjectStorageBucket:                getEnv("OBJECT_STORAGE_BUCKET", "velane-data"),
+		ObjectStoragePrefix:                strings.Trim(os.Getenv("OBJECT_STORAGE_PREFIX"), "/"),
+		ObjectStorageS3Region:              getEnv("OBJECT_STORAGE_S3_REGION", "us-east-1"),
+		ObjectStorageS3Endpoint:            strings.TrimSpace(os.Getenv("OBJECT_STORAGE_S3_ENDPOINT")),
+		ObjectStorageS3ForcePathStyle:      getEnv("OBJECT_STORAGE_S3_FORCE_PATH_STYLE", "false") == "true",
+		ObjectStorageAzureAccountURL:       strings.TrimSpace(os.Getenv("OBJECT_STORAGE_AZURE_ACCOUNT_URL")),
+		ObjectStorageAzureConnectionString: strings.TrimSpace(os.Getenv("OBJECT_STORAGE_AZURE_CONNECTION_STRING")),
+		ObjectGCGracePeriod:                getDurationEnv("OBJECT_GC_GRACE_PERIOD", 7*24*time.Hour),
+		InvocationRetention:                getDurationEnv("INVOCATION_RETENTION", 0),
+		PublicBaseURL:                      getEnv("PUBLIC_BASE_URL", "http://localhost:8092"),
+		GoogleOAuthClientID:                os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
+		GoogleOAuthClientSecret:            os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+		GitHubOAuthClientID:                os.Getenv("GITHUB_OAUTH_CLIENT_ID"),
+		GitHubOAuthClientSecret:            os.Getenv("GITHUB_OAUTH_CLIENT_SECRET"),
+		BootstrapEmail:                     os.Getenv("BOOTSTRAP_EMAIL"),
+		BootstrapPassword:                  os.Getenv("BOOTSTRAP_PASSWORD"),
+		BootstrapTenant:                    getEnv("BOOTSTRAP_TENANT", "default"),
+		JWTPrivateKeyPEM:                   os.Getenv("JWT_PRIVATE_KEY"),
+		NangoInternalURL:                   getEnv("NANGO_INTERNAL_URL", "http://nango:3003"),
+		NangoPublicURL:                     getEnv("NANGO_PUBLIC_URL", "http://localhost:3003"),
+		NangoConnectURL:                    getEnv("NANGO_CONNECT_URL", "http://localhost:3009"),
+		NangoApiURL:                        getEnv("NANGO_API_URL", "http://localhost:3003"),
+		NangoSecretKey:                     os.Getenv("NANGO_SECRET_KEY"),
+		NangoPublicKey:                     os.Getenv("NANGO_PUBLIC_KEY"),
+		NangoWebhookSecret:                 os.Getenv("NANGO_WEBHOOK_SECRET"),
+		MCPPublicURL:                       strings.TrimSpace(os.Getenv("MCP_PUBLIC_URL")),
+		InternalProxyURL:                   getEnv("INTERNAL_PROXY_URL", "http://control-plane:8080"),
+		LicenseKey:                         os.Getenv("VELANE_LICENSE_KEY"),
+		CloudMode:                          os.Getenv("VELANE_CLOUD") == "true",
+		ExecutorType:                       getEnv("EXECUTOR_TYPE", "process"),
+		FirecrackerBinary:                  getEnv("FIRECRACKER_BINARY", "/usr/local/bin/firecracker"),
+		FirecrackerJailerBinary:            getEnv("FIRECRACKER_JAILER_BINARY", "/usr/local/bin/jailer"),
+		FirecrackerBunRootfs:               os.Getenv("FIRECRACKER_BUN_ROOTFS"),
+		FirecrackerPythonRootfs:            os.Getenv("FIRECRACKER_PYTHON_ROOTFS"),
+		FirecrackerKernelImage:             os.Getenv("FIRECRACKER_KERNEL_IMAGE"),
 	}
 }
 
@@ -192,4 +213,16 @@ func getEnv(key, defaultVal string) string {
 		return v
 	}
 	return defaultVal
+}
+
+func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil || value < 0 {
+		return defaultValue
+	}
+	return value
 }

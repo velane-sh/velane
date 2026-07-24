@@ -6,6 +6,8 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
   cluster_name = var.cluster_name != "" ? var.cluster_name : "${var.name_prefix}-${var.region}"
   azs          = slice(data.aws_availability_zones.available.names, 0, var.availability_zone_count)
@@ -29,6 +31,35 @@ locals {
     },
     var.tags,
   )
+}
+
+resource "aws_s3_bucket" "velane_data" {
+  bucket = "${local.cluster_name}-${data.aws_caller_identity.current.account_id}-data"
+  tags   = local.default_tags
+}
+
+resource "aws_s3_bucket_public_access_block" "velane_data" {
+  bucket                  = aws_s3_bucket.velane_data.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "velane_data" {
+  bucket = aws_s3_bucket.velane_data.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "velane_data" {
+  bucket = aws_s3_bucket.velane_data.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
 
 resource "aws_vpc" "main" {
@@ -348,6 +379,50 @@ resource "aws_iam_role" "alb_controller" {
   tags = merge(local.default_tags, {
     Name = "${local.cluster_name}-alb-controller"
   })
+}
+
+data "aws_iam_policy_document" "velane_storage_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_issuer_host}:sub"
+      values   = ["system:serviceaccount:${var.velane_namespace}:control-plane"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_issuer_host}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "velane_storage" {
+  name               = "${local.cluster_name}-storage-role"
+  assume_role_policy = data.aws_iam_policy_document.velane_storage_assume_role.json
+  tags               = local.default_tags
+}
+
+data "aws_iam_policy_document" "velane_storage" {
+  statement {
+    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    resources = [aws_s3_bucket.velane_data.arn]
+  }
+  statement {
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.velane_data.arn}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "velane_storage" {
+  name   = "${local.cluster_name}-storage"
+  role   = aws_iam_role.velane_storage.id
+  policy = data.aws_iam_policy_document.velane_storage.json
 }
 
 resource "aws_iam_policy" "alb_controller" {

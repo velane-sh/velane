@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/abskrj/velane/services/control-plane/internal/ids"
 	"github.com/abskrj/velane/services/control-plane/internal/models"
@@ -98,7 +99,14 @@ func (s *Store) ListSnippets(ctx context.Context, tenantID string) ([]*models.Sn
 
 // DeleteSnippet soft-deletes a snippet by setting deleted_at.
 func (s *Store) DeleteSnippet(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `UPDATE snippets SET deleted_at = now() WHERE id = $1`, id)
+	grace := s.objectGCGrace
+	if grace <= 0 {
+		grace = 7 * 24 * time.Hour
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE snippets SET deleted_at = now(), objects_delete_after = now() + $2::interval WHERE id = $1`,
+		id, durationInterval(grace),
+	)
 	return err
 }
 

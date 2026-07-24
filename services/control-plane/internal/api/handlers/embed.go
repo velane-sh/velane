@@ -298,6 +298,6 @@ func (h *EmbedHandler) GetSnippetLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"snippet_id": snippetID,
-		"items":      items,
+		"items":      summarizeInvocations(items),
 	})
 }

@@ -93,3 +93,20 @@ output "setup_alb_controller_command" {
   description = "Run this script after applying this module to install the AWS Load Balancer Controller."
   value       = "bash infra/scripts/setup-alb-controller.sh --cluster ${aws_eks_cluster.main.name} --region ${var.region} --role-arn ${aws_iam_role.alb_controller.arn}"
 }
+
+output "object_storage_bucket" {
+  description = "S3 bucket for workflow versions and invocation payloads."
+  value       = aws_s3_bucket.velane_data.id
+}
+
+output "object_storage_role_arn" {
+  description = "IRSA role ARN for the control-plane Kubernetes service account."
+  value       = aws_iam_role.velane_storage.arn
+}
+
+output "object_storage_service_account_annotations" {
+  description = "Pass this map to the k8s module control_plane_service_account_annotations variable."
+  value = {
+    "eks.amazonaws.com/role-arn" = aws_iam_role.velane_storage.arn
+  }
+}
