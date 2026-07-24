@@ -12,6 +12,8 @@
   <a href="https://github.com/abskrj/velane/actions/workflows/build-and-push.yml"><img src="https://github.com/abskrj/velane/actions/workflows/build-and-push.yml/badge.svg" alt="Build" /></a>
 </p>
 
+[![OpenSSF Baseline](https://www.bestpractices.dev/projects/13774/baseline)](https://www.bestpractices.dev/projects/13774)
+
 ---
 
 ```typescript
