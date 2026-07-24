@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -53,30 +54,36 @@ func (c *Client) Enqueue(ctx context.Context, job Job) error {
 	return nil
 }
 
-// Dequeue blocks until a job is available (BRPOP with 0 timeout = block forever)
-// or until the context is cancelled, whichever comes first.
+// Dequeue blocks until a job is available or the context is cancelled,
+// whichever comes first.
 // Returns (nil, nil) when the context is cancelled.
 func (c *Client) Dequeue(ctx context.Context) (*Job, error) {
-	// BRPOP returns a slice of [key, value].
-	result, err := c.rdb.BRPop(ctx, 0, jobQueueKey).Result()
-	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	for {
+		if ctx.Err() != nil {
 			return nil, nil
 		}
-		// redis.Nil shouldn't happen with timeout=0 but handle gracefully.
-		if errors.Is(err, redis.Nil) {
-			return nil, nil
+
+		// Use a finite timeout so cancellation is observed even when the Redis
+		// client is blocked waiting for a response from BRPOP.
+		result, err := c.rdb.BRPop(ctx, time.Second, jobQueueKey).Result()
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, nil
+			}
+			if errors.Is(err, redis.Nil) {
+				continue
+			}
+			return nil, fmt.Errorf("dequeue brpop: %w", err)
 		}
-		return nil, fmt.Errorf("dequeue brpop: %w", err)
-	}
 
-	if len(result) < 2 {
-		return nil, fmt.Errorf("dequeue: unexpected brpop result length %d", len(result))
-	}
+		if len(result) < 2 {
+			return nil, fmt.Errorf("dequeue: unexpected brpop result length %d", len(result))
+		}
 
-	var job Job
-	if err := json.Unmarshal([]byte(result[1]), &job); err != nil {
-		return nil, fmt.Errorf("dequeue unmarshal: %w", err)
+		var job Job
+		if err := json.Unmarshal([]byte(result[1]), &job); err != nil {
+			return nil, fmt.Errorf("dequeue unmarshal: %w", err)
+		}
+		return &job, nil
 	}
-	return &job, nil
 }
