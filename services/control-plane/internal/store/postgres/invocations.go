@@ -58,8 +58,12 @@ func (s *Store) CreateInvocationWithMode(
 			return nil, err
 		}
 		storedInput = ""
+		// Keep a durable copy until the terminal result has been persisted.
+		// Workers can therefore finalize an invocation even when object storage
+		// becomes unavailable after scheduling.
+		outbox = encoded
 		if err := s.objects.Put(ctx, payloadRef, "application/json", "gzip", encoded); err != nil {
-			payloadState, outbox = "failed", encoded
+			payloadState = "failed"
 		} else {
 			payloadState = "stored"
 		}
@@ -69,7 +73,7 @@ func (s *Store) CreateInvocationWithMode(
 		   (id, snippet_id, version_id, environment, tenant_id, status, input_payload, invoke_mode, callback_url,
 		    payload_ref, payload_state, payload_outbox, payload_retry_at, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12,
-		         CASE WHEN $12::bytea IS NULL THEN NULL ELSE now() END, $13)
+		         CASE WHEN $11 = 'failed' THEN now() ELSE NULL END, $13)
 		 RETURNING id, snippet_id, version_id, environment, tenant_id, status,
 		           input_payload, input_ref, output, output_ref, error, stderr, stderr_ref, duration_ms, peak_memory_mb, cpu_ms,
 		           created_at, completed_at, callback_url, invoke_mode`,
@@ -359,7 +363,7 @@ func (s *Store) GetInvocation(ctx context.Context, id string) (*models.Invocatio
 		 FROM invocations WHERE id = $1`,
 		id,
 	)
-	inv, err := scanInvocation(row)
+	inv, err := scanInvocationWithPayloadState(row)
 	if err != nil {
 		return nil, fmt.Errorf("GetInvocation: %w", err)
 	}
@@ -455,7 +459,7 @@ func (s *Store) ListInvocationsBySnippet(ctx context.Context, snippetID string, 
 	rows, err := s.pool.Query(ctx,
 		`SELECT id, snippet_id, version_id, environment, tenant_id, status,
 		        input_payload, input_ref, output, output_ref, error, stderr, stderr_ref, duration_ms, peak_memory_mb, cpu_ms,
-		        created_at, completed_at, callback_url, invoke_mode
+		        created_at, completed_at, callback_url, invoke_mode, payload_state
 		 FROM invocations WHERE snippet_id = $1
 		 ORDER BY created_at DESC LIMIT $2`,
 		snippetID, limit,

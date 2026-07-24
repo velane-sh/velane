@@ -148,6 +148,7 @@ func (s *Store) retryPayloadOutbox(ctx context.Context, limit int) error {
 		`SELECT id, payload_ref, payload_outbox
 		 FROM invocations
 		 WHERE payload_outbox IS NOT NULL
+		   AND payload_state = 'failed'
 		   AND (payload_retry_at IS NULL OR payload_retry_at <= now())
 		 ORDER BY payload_retry_at NULLS FIRST
 		 LIMIT $1`,

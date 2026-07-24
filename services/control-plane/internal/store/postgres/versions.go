@@ -132,7 +132,7 @@ func (s *Store) GetVersionByNumber(ctx context.Context, snippetID string, num in
 	if err != nil {
 		return nil, fmt.Errorf("GetVersionByNumber: %w", err)
 	}
-	return v, nil
+	return s.hydrateVersion(ctx, v)
 }
 
 // ListVersions returns all versions for a snippet ordered by version_number.
