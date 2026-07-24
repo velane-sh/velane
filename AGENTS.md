@@ -188,3 +188,18 @@ tofu -chdir=../aws-eks output -raw acm_certificate_arn
 - `PUBLIC_BASE_URL` and OAuth client env vars are wired via `terraform.tfvars` → control-plane secret.
 - EKS kubeconfig must be valid (`aws eks update-kubeconfig` or set `kubeconfig_context` in tfvars).
 - Full walkthrough: `infra/terraform/k8s/README.md`.
+
+## Pull requests
+
+When creating a pull request, add the appropriate changelog label so release notes are grouped correctly (see `.github/release.yml`).
+
+Use `gh pr create --label <label>` or `gh pr edit <number> --add-label <label>` after opening the PR.
+
+| Change type | Label |
+|---|---|
+| New feature or enhancement | `enhancement` |
+| Bug fix | `bug` |
+| Docs-only change | `documentation` |
+| CI, infra, refactor, or mixed work with no better fit | `enhancement` if user-facing; otherwise leave unlabeled (lands in **Other changes**) |
+
+Do not skip labeling for feature, fix, or docs PRs. Never add `duplicate`, `invalid`, `wontfix`, or `question` to merged work.

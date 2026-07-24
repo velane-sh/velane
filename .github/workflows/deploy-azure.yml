@@ -2,7 +2,7 @@ name: Deploy to Azure
 
 on:
   workflow_run:
-    workflows: ["Build and Push Docker Images"]
+    workflows: ["Build and Push Docker Images", "Release"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -25,18 +25,35 @@ jobs:
     if: >
       (github.event_name == 'workflow_dispatch') ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+       ((github.event.workflow_run.name == 'Build and Push Docker Images' &&
+         github.event.workflow_run.event == 'push') ||
+        (github.event.workflow_run.name == 'Release' &&
+         github.event.workflow_run.event == 'workflow_dispatch')))
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
       - name: Resolve image tag
         id: image
         env:
           DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
+          SOURCE_WORKFLOW: ${{ github.event.workflow_run.name }}
         run: |
           if [ -n "$REQUESTED_TAG" ]; then
             tag="$REQUESTED_TAG"
+          elif [ "$SOURCE_WORKFLOW" = "Release" ]; then
+            release_tag="$(git tag --points-at "$DEPLOY_SHA" --list 'v[0-9]*' --sort=-version:refname | head -n 1)"
+            if [ -z "$release_tag" ]; then
+              echo "No release tag found for $DEPLOY_SHA" >&2
+              exit 1
+            fi
+            tag="${release_tag#v}"
           else
             tag="sha-${DEPLOY_SHA:0:7}"
           fi

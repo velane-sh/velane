@@ -75,7 +75,7 @@ Open the admin portal at **http://localhost:8092** and log in. That's it.
 - **Egress policy** — per-tenant IP/CIDR and domain blocklist enforced inside the executor
 - **Observability** — per-invocation logs, metrics, and replay
 - **Embeddable dashboard** — white-label iframe viewer with short-lived embed tokens
-- **Git push-to-deploy** — push to `main` → staging, tag `v*` → prod
+- **Git push-to-deploy** — push to `main` builds and deploys by commit (`sha-*`); semver releases via **Actions → Release**
 - **Firecracker** — optional VM-boundary isolation via AWS Firecracker (requires KVM)
 - **MCP server** — connect Cursor or Claude Code directly to generate and deploy snippets
 
