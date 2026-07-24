@@ -359,11 +359,11 @@ func (s *Store) GetInvocation(ctx context.Context, id string) (*models.Invocatio
 	row := s.pool.QueryRow(ctx,
 		`SELECT id, snippet_id, version_id, environment, tenant_id, status,
 		        input_payload, input_ref, output, output_ref, error, stderr, stderr_ref, duration_ms, peak_memory_mb, cpu_ms,
-		        created_at, completed_at, callback_url, invoke_mode, payload_state
+		        created_at, completed_at, callback_url, invoke_mode
 		 FROM invocations WHERE id = $1`,
 		id,
 	)
-	inv, err := scanInvocationWithPayloadState(row)
+	inv, err := scanInvocation(row)
 	if err != nil {
 		return nil, fmt.Errorf("GetInvocation: %w", err)
 	}
