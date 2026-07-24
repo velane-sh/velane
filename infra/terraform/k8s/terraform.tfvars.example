@@ -140,5 +140,15 @@ nango_api_url     = ""
 # =============================================================================
 
 # clickhouse_dsn = "clickhouse://user:pass@HOST:9000/velane"
-# logs_bucket    = "my-velane-logs"
-# replay_bucket  = "my-velane-replays"
+
+# Workflow source and invocation payload storage (required for new installs).
+object_storage_driver    = "s3"
+object_storage_bucket    = "REPLACE_WITH_aws-eks_object_storage_bucket_OUTPUT"
+object_storage_s3_region = "us-east-1"
+control_plane_service_account_annotations = {
+  "eks.amazonaws.com/role-arn" = "REPLACE_WITH_aws-eks_object_storage_role_arn_OUTPUT"
+}
+
+# No automatic invocation payload deletion by default.
+invocation_retention   = "0"
+object_gc_grace_period = "168h"

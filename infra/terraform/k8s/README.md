@@ -38,7 +38,15 @@ tofu output update_kubeconfig_command   # run this to configure kubectl
 tofu output acm_certificate_arn         # paste into k8s/terraform.tfvars
 tofu output acm_dns_validation_records  # add these to your DNS
 tofu output setup_alb_controller_command
+tofu output object_storage_bucket
+tofu output object_storage_role_arn
 ```
+
+The EKS module creates a private, encrypted, versioned S3 bucket and an IRSA
+role for the control plane. Pass `object_storage_bucket` and
+`object_storage_role_arn` into the corresponding values shown in
+`k8s/terraform.tfvars.example`. Workflow source and invocation payloads are
+then stored under tenant-specific prefixes in this shared bucket.
 
 ---
 

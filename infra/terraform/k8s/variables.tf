@@ -212,6 +212,79 @@ variable "replay_bucket" {
   default     = ""
 }
 
+variable "object_storage_driver" {
+  description = "Object storage driver: s3 or azure."
+  type        = string
+  default     = "s3"
+}
+
+variable "object_storage_bucket" {
+  description = "Shared installation bucket or Azure Blob container."
+  type        = string
+  default     = "velane-data"
+}
+
+variable "object_storage_prefix" {
+  description = "Optional prefix within the shared bucket/container."
+  type        = string
+  default     = ""
+}
+
+variable "object_storage_s3_region" {
+  type    = string
+  default = "us-east-1"
+}
+
+variable "object_storage_s3_endpoint" {
+  description = "Optional S3-compatible endpoint, such as MinIO."
+  type        = string
+  default     = ""
+}
+
+variable "object_storage_s3_force_path_style" {
+  type    = bool
+  default = false
+}
+
+variable "object_storage_azure_account_url" {
+  type    = string
+  default = ""
+}
+
+variable "object_storage_azure_connection_string" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "object_storage_access_key_id" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "object_storage_secret_access_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "control_plane_service_account_annotations" {
+  description = "Cloud workload-identity annotations for the control-plane service account."
+  type        = map(string)
+  default     = {}
+}
+
+variable "object_gc_grace_period" {
+  type    = string
+  default = "168h"
+}
+
+variable "invocation_retention" {
+  type    = string
+  default = "0"
+}
+
 # ==================== Ingress ====================
 
 variable "enable_ingress" {

@@ -78,6 +78,23 @@ services:
     volumes:
       - minio_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set velane http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing velane/velane-data
+    restart: "no"
 
   bun-executor:
     build:
@@ -125,6 +142,15 @@ services:
       CLICKHOUSE_DSN: http://clickhouse:8123
       LOGS_BUCKET: velane-logs
       REPLAY_BUCKET: velane-replays
+      OBJECT_STORAGE_DRIVER: s3
+      OBJECT_STORAGE_BUCKET: velane-data
+      OBJECT_STORAGE_S3_REGION: us-east-1
+      OBJECT_STORAGE_S3_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_S3_FORCE_PATH_STYLE: "true"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      OBJECT_GC_GRACE_PERIOD: ${OBJECT_GC_GRACE_PERIOD:-168h}
+      INVOCATION_RETENTION: ${INVOCATION_RETENTION:-0}
       SESSION_DURATION_HOURS: "24"
       EXECUTOR_TYPE: "process"
       # Stable dev JWT key — replace with a real secret in production.
@@ -169,7 +195,9 @@ services:
       clickhouse:
         condition: service_started
       minio:
-        condition: service_started
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
       nango:
         condition: service_started
       bun-executor:

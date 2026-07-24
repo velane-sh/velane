@@ -36,4 +36,5 @@ type Invocation struct {
 	CompletedAt  *time.Time       `json:"completed_at,omitempty"`
 	CallbackURL  string           `json:"callback_url,omitempty"`
 	InvokeMode   string           `json:"invoke_mode"` // "sync" | "async" | "stream"
+	PayloadState string           `json:"payload_state"`
 }
