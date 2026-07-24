@@ -49,6 +49,7 @@ type InvokeRequest struct {
 	Env           string // "dev" | "staging" | "prod"
 	Input         string // raw JSON
 	PinnedVersion int    // 0 = use active version from environment
+	InvokeMode    string // "sync" | "stream"; used when sync runs through the queue
 }
 
 // Scheduler resolves, executes, and records snippet invocations.
@@ -406,6 +407,14 @@ func (s *Scheduler) InvokeQueued(ctx context.Context, req InvokeRequest) (*model
 		return nil, fmt.Errorf("queued invocation requires a configured queue")
 	}
 
+	invokeMode := req.InvokeMode
+	if invokeMode == "" {
+		invokeMode = "sync"
+	}
+	if invokeMode != "sync" && invokeMode != "stream" {
+		return nil, fmt.Errorf("queued invocation mode must be sync or stream")
+	}
+
 	snippet, version, err := s.resolveVersion(ctx, req)
 	if err != nil {
 		return nil, err
@@ -426,7 +435,7 @@ func (s *Scheduler) InvokeQueued(ctx context.Context, req InvokeRequest) (*model
 	invocation, err := s.store.CreateInvocationWithMode(
 		ctx,
 		snippet.ID, version.ID, req.Env, req.TenantID, input,
-		"stream", "",
+		invokeMode, "",
 		models.InvocationRunning,
 	)
 	if err != nil {

@@ -525,6 +525,35 @@ func TestScheduler_InvokeAsync_NoQueue(t *testing.T) {
 	}
 }
 
+func TestScheduler_InvokeQueued_PreservesRequestedMode(t *testing.T) {
+	for _, mode := range []string{"sync", "stream"} {
+		t.Run(mode, func(t *testing.T) {
+			versionID := "ver-1"
+			activeVersion := versionID
+			store := buildDefaultStore("inv-queued-1", versionID, &activeVersion)
+			queue := &mockQueue{}
+			sched := scheduler.NewWithQueue(store, &mockExecutor{}, queue, testEncKey, nil)
+
+			inv, err := sched.InvokeQueued(context.Background(), scheduler.InvokeRequest{
+				TenantID:    "tenant-1",
+				SnippetSlug: "hello",
+				Env:         "prod",
+				Input:       `{}`,
+				InvokeMode:  mode,
+			})
+			if err != nil {
+				t.Fatalf("InvokeQueued error: %v", err)
+			}
+			if inv.InvokeMode != mode {
+				t.Errorf("invoke_mode = %q; want %q", inv.InvokeMode, mode)
+			}
+			if len(queue.jobs) != 1 {
+				t.Fatalf("queued jobs = %d; want 1", len(queue.jobs))
+			}
+		})
+	}
+}
+
 // --- Stream tests ---
 
 func TestScheduler_InvokeStream_Success(t *testing.T) {
