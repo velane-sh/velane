@@ -204,3 +204,43 @@ export interface InvocationResult {
   status?: string
   logs?: LogLine[]
 }
+
+export type InvocationStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'timeout'
+  | 'oom_killed'
+
+export interface InvocationSummary {
+  id: string
+  snippet_id: string
+  version_id: string
+  environment: string
+  tenant_id: string
+  status: InvocationStatus
+  duration_ms: number
+  peak_memory_mb: number
+  cpu_ms: number
+  created_at: string
+  completed_at?: string
+  invoke_mode: string
+  payload_state: string
+}
+
+export interface Invocation extends InvocationSummary {
+  input_payload: string
+  input_ref?: string
+  output: string
+  output_ref?: string
+  error?: string
+  stderr: string
+  stderr_ref?: string
+  callback_url?: string
+}
+
+export interface InvocationLogResponse {
+  snippet_id: string
+  items: InvocationSummary[]
+}

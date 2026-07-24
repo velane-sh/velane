@@ -12,6 +12,7 @@ import EgressPage from './pages/EgressPage'
 import SnippetsPage from './pages/SnippetsPage'
 import SnippetEditorPage from './pages/SnippetEditorPage'
 import WorkflowSettingsPage from './pages/WorkflowSettingsPage'
+import WorkflowExecutionsPage from './pages/WorkflowExecutionsPage'
 import EmbedPage from './pages/EmbedPage'
 import EmbedEntryPage from './pages/EmbedEntryPage'
 import VariablesPage from './pages/VariablesPage'
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="overview" element={<OverviewPage />} />
           <Route path="snippets" element={<SnippetsPage />} />
           <Route path="snippets/:id" element={<SnippetEditorPage />} />
+          <Route path="snippets/:id/executions" element={<WorkflowExecutionsPage />} />
           <Route path="snippets/:id/settings" element={<WorkflowSettingsPage />} />
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="mcp" element={<MCPPage />} />

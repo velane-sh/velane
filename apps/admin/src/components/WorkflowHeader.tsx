@@ -42,6 +42,18 @@ export default function WorkflowHeader({ snippet, trailing }: WorkflowHeaderProp
             Editor
           </NavLink>
           <NavLink
+            to={`/dashboard/snippets/${id}/executions`}
+            className={({ isActive }) =>
+              `border-b-2 py-2 text-sm font-medium ${
+                isActive
+                  ? 'border-gray-900 text-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`
+            }
+          >
+            Executions
+          </NavLink>
+          <NavLink
             to={`/dashboard/snippets/${id}/settings`}
             className={({ isActive }) =>
               `border-b-2 py-2 text-sm font-medium ${

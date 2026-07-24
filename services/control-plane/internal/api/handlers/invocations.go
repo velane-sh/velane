@@ -182,6 +182,7 @@ authOKByToken:
 	if mode == "" {
 		mode = "sync"
 	}
+	invokeReq.InvokeMode = mode
 
 	switch mode {
 	case "sync":

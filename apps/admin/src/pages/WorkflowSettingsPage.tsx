@@ -93,7 +93,10 @@ export default function WorkflowSettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-gray-500">Loading…</div>
+      <div className="flex h-full flex-col">
+        <WorkflowHeader snippet={snippet} />
+        <div className="flex flex-1 items-center justify-center text-gray-500">Loading settings…</div>
+      </div>
     )
   }
 

@@ -13,6 +13,9 @@ import type {
   SnippetVersion,
   SnippetEnvironment,
   InvocationResult,
+  Invocation,
+  InvocationLogResponse,
+  InvocationStatus,
   LogLine,
   EmbedToken,
   Secret,
@@ -451,6 +454,21 @@ export const api = {
   },
 
   // Invocation
+  async listSnippetInvocations(
+    snippetId: string,
+    filters: { environment?: string; status?: InvocationStatus; limit?: number } = {},
+  ): Promise<InvocationLogResponse> {
+    const params = new URLSearchParams()
+    if (filters.environment) params.set('env', filters.environment)
+    if (filters.status) params.set('status', filters.status)
+    params.set('limit', String(filters.limit ?? 50))
+    return request('GET', `/v1/logs/snippets/${snippetId}?${params.toString()}`)
+  },
+
+  async getInvocation(id: string): Promise<Invocation> {
+    return request('GET', `/v1/invocations/${id}`)
+  },
+
   async invokeSnippet(snippetSlug: string, input: string, env = 'dev'): Promise<InvocationResult> {
     return request('POST', `/v1/invoke/${snippetSlug}?env=${env}`, JSON.parse(input || '{}'), 'apikey')
   },
