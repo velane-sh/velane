@@ -125,16 +125,19 @@ func (s *Store) backfillInvocationPayloads(ctx context.Context, limit int) error
 		if err != nil {
 			return err
 		}
-		if err := s.objects.Put(ctx, ref, "application/json", "gzip", body); err != nil {
+		if err := s.objects.Put(ctx, ref, "application/json", "", body); err != nil {
 			continue
 		}
-		sum := sha256.Sum256(body)
+		checksum, err := logicalInvocationPayloadChecksum(body)
+		if err != nil {
+			return err
+		}
 		_, err = s.pool.Exec(ctx,
 			`UPDATE invocations
 			 SET input_payload = '', output = NULL, error = NULL, stderr = NULL,
 			     payload_ref = $2, payload_checksum = $3, payload_size = $4, payload_state = 'stored'
 			 WHERE id = $1 AND payload_state = 'legacy'`,
-			item.id, ref, hex.EncodeToString(sum[:]), len(body),
+			item.id, ref, checksum, len(body),
 		)
 		if err != nil {
 			return err
@@ -171,7 +174,7 @@ func (s *Store) retryPayloadOutbox(ctx context.Context, limit int) error {
 		items = append(items, item)
 	}
 	for _, item := range items {
-		if err := s.objects.Put(ctx, item.ref, "application/json", "gzip", item.body); err != nil {
+		if err := s.objects.Put(ctx, item.ref, "application/json", "", item.body); err != nil {
 			_, _ = s.pool.Exec(ctx,
 				`UPDATE invocations
 				 SET payload_attempts = payload_attempts + 1,
