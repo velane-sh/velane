@@ -72,7 +72,7 @@ func (s *Store) CreateInvocationWithMode(
 		// Workers can therefore finalize an invocation even when object storage
 		// becomes unavailable after scheduling.
 		outbox = encoded
-		if err := s.objects.Put(ctx, payloadRef, "application/json", "gzip", encoded); err != nil {
+		if err := s.objects.Put(ctx, payloadRef, "application/json", "", encoded); err != nil {
 			payloadState = "failed"
 		} else {
 			payloadState = "stored"
@@ -118,10 +118,13 @@ func (s *Store) UpdateInvocationResult(ctx context.Context, id string, status mo
 		payloadRef := invocationObjectKey(invocation.TenantID, invocation.SnippetID, invocation.ID, invocation.CreatedAt)
 		payloadState := "stored"
 		var outbox []byte
-		if err := s.objects.Put(ctx, payloadRef, "application/json", "gzip", encoded); err != nil {
+		if err := s.objects.Put(ctx, payloadRef, "application/json", "", encoded); err != nil {
 			payloadState, outbox = "failed", encoded
 		}
-		sum := sha256.Sum256(encoded)
+		checksum, err := logicalInvocationPayloadChecksum(encoded)
+		if err != nil {
+			return err
+		}
 		_, err = s.pool.Exec(ctx,
 			`UPDATE invocations
 			 SET status = $2, output = NULL, error = NULL, stderr = NULL,
@@ -131,7 +134,7 @@ func (s *Store) UpdateInvocationResult(ctx context.Context, id string, status mo
 			     payload_retry_at = CASE WHEN $8::bytea IS NULL THEN NULL ELSE now() END
 			 WHERE id = $1`,
 			id, string(status), durationMs, peakMemoryMB, cpuMs, payloadRef, payloadState, outbox,
-			hex.EncodeToString(sum[:]), len(encoded),
+			checksum, len(encoded),
 		)
 		if err != nil {
 			return fmt.Errorf("UpdateInvocationResult object-backed: %w", err)
@@ -409,16 +412,75 @@ func encodeInvocationPayload(document invocationPayloadObject) ([]byte, error) {
 }
 
 func decodeInvocationPayload(encoded []byte) (*invocationPayloadObject, error) {
+	raw := encoded
+	if isGzipPayload(encoded) {
+		var err error
+		raw, err = decompressInvocationPayload(encoded)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var document invocationPayloadObject
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return nil, fmt.Errorf("decode invocation payload: %w", err)
+	}
+	return &document, nil
+}
+
+func isGzipPayload(body []byte) bool {
+	return len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b
+}
+
+func decompressInvocationPayload(encoded []byte) ([]byte, error) {
 	reader, err := gzip.NewReader(bytes.NewReader(encoded))
 	if err != nil {
 		return nil, fmt.Errorf("open invocation payload: %w", err)
 	}
 	defer reader.Close()
-	var document invocationPayloadObject
-	if err := json.NewDecoder(reader).Decode(&document); err != nil {
-		return nil, fmt.Errorf("decode invocation payload: %w", err)
+	var raw bytes.Buffer
+	if _, err := raw.ReadFrom(reader); err != nil {
+		return nil, fmt.Errorf("decompress invocation payload: %w", err)
 	}
-	return &document, nil
+	return raw.Bytes(), nil
+}
+
+func logicalInvocationPayloadChecksum(encoded []byte) (string, error) {
+	raw := encoded
+	if isGzipPayload(encoded) {
+		var err error
+		raw, err = decompressInvocationPayload(encoded)
+		if err != nil {
+			return "", err
+		}
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func invocationPayloadChecksumMatches(body []byte, expected string) bool {
+	direct := sha256.Sum256(body)
+	if hex.EncodeToString(direct[:]) == expected {
+		return true
+	}
+
+	if isGzipPayload(body) {
+		logical, err := logicalInvocationPayloadChecksum(body)
+		return err == nil && logical == expected
+	}
+
+	// Legacy rows checksum the compressed representation. Azure may have
+	// transparently decoded blobs marked Content-Encoding: gzip, so recreate
+	// the deterministic gzip bytes before comparing the legacy checksum.
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(body); err != nil {
+		return false
+	}
+	if err := writer.Close(); err != nil {
+		return false
+	}
+	legacy := sha256.Sum256(compressed.Bytes())
+	return hex.EncodeToString(legacy[:]) == expected
 }
 
 func (s *Store) hydrateInvocation(ctx context.Context, invocation *models.Invocation) (*models.Invocation, error) {
@@ -452,8 +514,7 @@ func (s *Store) hydrateInvocation(ctx context.Context, invocation *models.Invoca
 		return invocation, nil
 	}
 	if checksum != nil && *checksum != "" {
-		sum := sha256.Sum256(encoded)
-		if hex.EncodeToString(sum[:]) != *checksum {
+		if !invocationPayloadChecksumMatches(encoded, *checksum) {
 			return nil, fmt.Errorf("invocation payload object checksum mismatch")
 		}
 	}
