@@ -469,7 +469,20 @@ func (h *InvocationsHandler) GetInvocation(w http.ResponseWriter, r *http.Reques
 	id := chi.URLParam(r, "id")
 	invocation, err := h.store.GetInvocation(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "invocation not found")
+		if errors.Is(err, postgres.ErrInvocationNotFound) {
+			writeError(w, http.StatusNotFound, "invocation not found")
+			return
+		}
+		h.log.Error("get invocation failed",
+			zap.String("invocation_id", id),
+			zap.String("tenant_id", tenant.ID),
+			zap.Error(err),
+		)
+		if errors.Is(err, postgres.ErrInvocationPayloadUnavailable) {
+			writeError(w, http.StatusServiceUnavailable, "invocation payload unavailable")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to retrieve invocation")
 		return
 	}
 

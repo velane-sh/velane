@@ -7,12 +7,22 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/abskrj/velane/services/control-plane/internal/ids"
 	"github.com/abskrj/velane/services/control-plane/internal/models"
+	"github.com/jackc/pgx/v5"
+)
+
+var (
+	// ErrInvocationNotFound means the invocation metadata row does not exist.
+	ErrInvocationNotFound = errors.New("invocation not found")
+	// ErrInvocationPayloadUnavailable means metadata exists, but its external
+	// payload could not be loaded or validated.
+	ErrInvocationPayloadUnavailable = errors.New("invocation payload unavailable")
 )
 
 type invocationPayloadObject struct {
@@ -365,9 +375,16 @@ func (s *Store) GetInvocation(ctx context.Context, id string) (*models.Invocatio
 	)
 	inv, err := scanInvocation(row)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvocationNotFound
+		}
 		return nil, fmt.Errorf("GetInvocation: %w", err)
 	}
-	return s.hydrateInvocation(ctx, inv)
+	hydrated, err := s.hydrateInvocation(ctx, inv)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvocationPayloadUnavailable, err)
+	}
+	return hydrated, nil
 }
 
 func invocationObjectKey(tenantID, workflowID, invocationID string, createdAt time.Time) string {
