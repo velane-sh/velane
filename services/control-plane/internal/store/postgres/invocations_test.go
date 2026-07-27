@@ -2,9 +2,11 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/abskrj/velane/services/control-plane/internal/models"
+	"github.com/abskrj/velane/services/control-plane/internal/store/postgres"
 )
 
 // setupInvocationFixtures creates a tenant, snippet, version, and publishes the
@@ -137,5 +139,8 @@ func TestGetInvocation_NotFound(t *testing.T) {
 	_, err := store.GetInvocation(ctx, "00000000-0000-0000-0000-000000000000")
 	if err == nil {
 		t.Fatal("expected error for non-existent invocation, got nil")
+	}
+	if !errors.Is(err, postgres.ErrInvocationNotFound) {
+		t.Fatalf("error = %v; want ErrInvocationNotFound", err)
 	}
 }

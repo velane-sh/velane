@@ -2,11 +2,13 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/abskrj/velane/services/control-plane/internal/models"
+	"github.com/abskrj/velane/services/control-plane/internal/store/postgres"
 )
 
 type memoryObjectStore struct {
@@ -50,6 +52,12 @@ func (s *memoryObjectStore) setFailPut(fail bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.failPut = fail
+}
+
+func (s *memoryObjectStore) clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	clear(s.objects)
 }
 
 func TestObjectBackedVersionAndInvocationRoundTrip(t *testing.T) {
@@ -122,5 +130,43 @@ func TestObjectBackedVersionAndInvocationRoundTrip(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].PayloadState != "stored" {
 		t.Fatalf("invocation summaries = %#v", items)
+	}
+}
+
+func TestGetInvocation_MissingObjectIsPayloadUnavailable(t *testing.T) {
+	store := testStore(t)
+	objects := newMemoryObjectStore()
+	store.SetObjectStore(objects)
+
+	ctx := context.Background()
+	tenant, err := store.CreateTenant(ctx, "Missing Payload Test", uniqueSlug(t, "missing-payload"))
+	if err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+	snippet, err := store.CreateSnippet(ctx, tenant.ID, "Missing payload workflow", "bun", "user-1")
+	if err != nil {
+		t.Fatalf("create snippet: %v", err)
+	}
+	version, err := store.CreateVersion(ctx, snippet.ID, "export default () => null", "{}", "{}", "user-1", 5000, 128, 100)
+	if err != nil {
+		t.Fatalf("create version: %v", err)
+	}
+	invocation, err := store.CreateInvocation(ctx, snippet.ID, version.ID, "dev", tenant.ID, `{}`)
+	if err != nil {
+		t.Fatalf("create invocation: %v", err)
+	}
+	if err := store.UpdateInvocationResult(
+		ctx, invocation.ID, models.InvocationCompleted, `{"ok":true}`, "", "", 12, 8, 3,
+	); err != nil {
+		t.Fatalf("complete invocation: %v", err)
+	}
+
+	objects.clear()
+	_, err = store.GetInvocation(ctx, invocation.ID)
+	if !errors.Is(err, postgres.ErrInvocationPayloadUnavailable) {
+		t.Fatalf("error = %v; want ErrInvocationPayloadUnavailable", err)
+	}
+	if errors.Is(err, postgres.ErrInvocationNotFound) {
+		t.Fatalf("payload error must not be reported as ErrInvocationNotFound: %v", err)
 	}
 }
