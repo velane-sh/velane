@@ -131,9 +131,9 @@ export default function Home() {
             />
             <div className="text-xl font-medium tracking-tight">Velane</div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-4">
             <a
-              className="hidden text-sm text-zinc-500 transition-colors hover:text-zinc-900 sm:inline-block"
+              className="rounded-full border border-black/10 px-3 py-1.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/5 hover:text-zinc-900"
               href="https://docs.velane.sh"
               target="_blank"
               rel="noreferrer"
@@ -173,11 +173,10 @@ export default function Home() {
                 Cloud infrastructure for your agents and small apps
               </h1>
               <p className="mt-6 text-lg leading-relaxed text-zinc-600">
-                Deploy agents, APIs, and small software with version control,
-                dev, staging, and production environments, secrets management,
-                zero-cold-start secure sandboxes, and 800+ integrations. All
-                within your cloud, with controls designed for compliance.
-                Build and operate it all from Claude, Codex, or Cursor.
+                Deploy agents, APIs, and small software in your cloud with
+                versioning, environments, secrets, secure zero-cold-start
+                sandboxes, compliance controls, and 800+ integrations. Manage
+                it all from Claude, Codex, or Cursor.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-4">
                 <a
