@@ -17,7 +17,7 @@ logs (`print` / `console.log`) appear **only in `dev`**.
 
 | Decision | Choice |
 |---|---|
-| Client contract | SSE stream; **content negotiation** — `Accept: text/event-stream` → SSE, else buffered final JSON |
+| Client contract | SSE stream; **content negotiation:** `Accept: text/event-stream` → SSE, else buffered final JSON |
 | Live transport | Redis, per-invocation channel (implemented as a **Redis Stream**, see §6) |
 | Worker topology | **Separate process** from the API; no in-memory hub |
 | Output types | debug logs → **dev only**; generator chunks + final result → **all envs** |
@@ -28,7 +28,7 @@ logs (`print` / `console.log`) appear **only in `dev`**.
 - Sync (`scheduler.Invoke`) calls `executor.Run()` inline and writes the DB once. Single JSON body.
 - Async (`InvokeAsync`) enqueues `redisstore.Job` on `velane:jobs`; worker `BRPOP`s and runs `exec.Run()` (buffered), writes DB once, optional webhook.
 - Stream (`InvokeStream`) calls `exec.RunStream()` directly in the API process (no worker), relays SSE; **stderr is dropped** in stream mode, and stdout carries both logs and the return value with no separation.
-- `StreamChunk{Data, Error, Done}` — no type tag, no log/result distinction.
+- `StreamChunk{Data, Error, Done}` has no type tag and no log/result distinction.
 - Worker runs in-process today but is structured to be a separate deployment.
 
 ## 4. Target architecture
@@ -90,11 +90,11 @@ footguns:
 
 - **No lost-message race.** Subscribe-before-enqueue makes raw pub/sub *mostly* safe, but any reconnect loses everything. Streams retain events.
 - **Resume / reconnect.** UI can reconnect with `Last-Event-ID` and replay from offset (SSE `id:` field maps cleanly to stream IDs).
-- **JSON (buffered) callers** can `XREAD` the whole thing after completion — same data path, no special casing.
+- **JSON (buffered) callers** can `XREAD` the whole thing after completion using the same data path with no special casing.
 - **TTL / trim** with `XADD MAXLEN` + key expiry bounds memory.
 
 Key: `velane:inv:<invocationID>:events`, set short TTL (e.g. a few minutes past
-completion). For prod (no logs) this stream is tiny — just `chunk` (maybe),
+completion). For prod (no logs) this stream is tiny, with just `chunk` (maybe),
 `result`, `done`.
 
 ## 7. Component-by-component changes
@@ -116,13 +116,13 @@ completion). For prod (no logs) this stream is tiny — just `chunk` (maybe),
 
 **Redis store (`store/redis/`)**
 
-- New file: per-invocation event stream helpers — `PublishEvent(ctx, invID, event)`, `ReadEvents(ctx, invID, lastID) (events, nextID)`, plus key TTL / trim. Keep `queue.go` (jobs list) as-is.
+- New file: per-invocation event stream helpers, including `PublishEvent(ctx, invID, event)`, `ReadEvents(ctx, invID, lastID) (events, nextID)`, plus key TTL / trim. Keep `queue.go` (jobs list) as-is.
 
 **Worker (`worker/worker.go`)**
 
 - For queued-streaming jobs, switch `process()` from `exec.Run()` to `exec.RunStream()`.
 - For each event: **if `env != "dev"` and `type == "log"`, skip**; else `XADD` to the invocation stream.
-- Set status `running` at start; on terminal event, **finalize DB** (`UpdateInvocationResult`) with output / stderr / status — same as today. Optionally checkpoint periodically.
+- Set status `running` at start; on terminal event, **finalize DB** (`UpdateInvocationResult`) with output / stderr / status, the same as today. Optionally checkpoint periodically.
 - Async + webhook behavior unchanged for async-mode jobs.
 
 **Job model (`redisstore.Job`)**
@@ -149,7 +149,7 @@ completion). For prod (no logs) this stream is tiny — just `chunk` (maybe),
 
 ## 8. Dev-gating logic
 
-- Single point of enforcement: the **worker**, keyed on the resolved `job.Env == "dev"`. `log` events are dropped before `XADD` in non-dev. This guarantees prod debug output never even reaches Redis, the client, or storage — clean security boundary.
+- Single point of enforcement: the **worker**, keyed on the resolved `job.Env == "dev"`. `log` events are dropped before `XADD` in non-dev. This guarantees prod debug output never reaches Redis, the client, or storage, creating a clean security boundary.
 - `chunk` and `result` are never gated.
 
 ## 9. Caller migration
@@ -158,7 +158,7 @@ completion). For prod (no logs) this stream is tiny — just `chunk` (maybe),
 |---|---|---|
 | Admin UI "Run" | sync JSON | SSE: render `chunk` / `result` in Output panel, `log` in Logs terminal (dev only) |
 | Admin Logs tab | placeholder | live SSE feed + historical via `get_logs` |
-| MCP `invoke_snippet` | buffered JSON | unchanged contract — server buffers stream, returns final JSON (logs field only in dev) |
+| MCP `invoke_snippet` | buffered JSON | unchanged contract; server buffers stream and returns final JSON (logs field only in dev) |
 | CLI `invoke` | JSON | default JSON (buffered); `--stream` already exists → SSE |
 | curl | JSON | JSON unless `Accept: text/event-stream` |
 
@@ -189,8 +189,8 @@ SSE is returned only when the caller sends `Accept: text/event-stream`; otherwis
 
 ## 12. Phasing (completed)
 
-- **Phase 1 — protocol + plumbing (done):** typed `StreamChunk` envelope; Bun + Python streaming harnesses rewritten to emit `log`/`chunk`/`result`/`error`/`done` and redirect user stdout/stderr to typed `log` events; Redis per-invocation event-stream helpers (`PublishEvent`/`ReadEvents`, `events.go`); `Job.Stream` flag; worker streaming path with dev-gating and DB finalize-before-done ordering.
-- **Phase 2 — handler + callers (done):** `Scheduler.InvokeQueued` + `HasEventStream`/`ReadEvents`; content-negotiating SSE / JSON handler (`invokeQueuedMode`); CLI `--stream` sends the SSE `Accept` header; MCP unchanged (buffered JSON); admin UI streams the run and splits Output vs. Logs; stale-invocation reaper in `main.go`.
+- **Phase 1, protocol + plumbing (done):** typed `StreamChunk` envelope; Bun + Python streaming harnesses rewritten to emit `log`/`chunk`/`result`/`error`/`done` and redirect user stdout/stderr to typed `log` events; Redis per-invocation event-stream helpers (`PublishEvent`/`ReadEvents`, `events.go`); `Job.Stream` flag; worker streaming path with dev-gating and DB finalize-before-done ordering.
+- **Phase 2, handler + callers (done):** `Scheduler.InvokeQueued` + `HasEventStream`/`ReadEvents`; content-negotiating SSE / JSON handler (`invokeQueuedMode`); CLI `--stream` sends the SSE `Accept` header; MCP unchanged (buffered JSON); admin UI streams the run and splits Output vs. Logs; stale-invocation reaper in `main.go`.
 
 ### Tests
 

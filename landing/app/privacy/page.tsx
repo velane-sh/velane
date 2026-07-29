@@ -51,7 +51,7 @@ export default function PrivacyPolicy() {
               This Privacy Policy applies when you use Velane&apos;s <span className="font-medium text-zinc-900">hosted cloud service</span>, including app.velane.sh and related Velane-operated infrastructure.
             </p>
             <p>
-              If you <span className="font-medium text-zinc-900">self-host</span> Velane on your own infrastructure, you control and own your tenant data — including snippets, logs, integration connections, and secrets. We do not collect or process that data unless you voluntarily share it with us (for example, through support requests). Your internal handling of self-hosted data is governed by your own policies and deployment choices. This website may still collect limited technical data when you visit it, as described below.
+              If you <span className="font-medium text-zinc-900">self-host</span> Velane on your own infrastructure, you control and own your tenant data, including snippets, logs, integration connections, and secrets. We do not collect or process that data unless you voluntarily share it with us (for example, through support requests). Your internal handling of self-hosted data is governed by your own policies and deployment choices. This website may still collect limited technical data when you visit it, as described below.
             </p>
           </section>
 
@@ -60,7 +60,7 @@ export default function PrivacyPolicy() {
             <h2 className="mb-4 text-xl font-medium tracking-tight text-zinc-900">2. Information We Collect</h2>
             <p className="mb-3">On Velane Cloud, we collect the following types of information:</p>
             <ul className="list-disc pl-6 space-y-2.5">
-              <li><span className="font-medium text-zinc-900">Account Information:</span> When you create an account or tenant, we collect your email address and name (if provided). Passwords are stored as one-way hashes — we never store plaintext passwords. We also issue session tokens to keep you signed in.</li>
+              <li><span className="font-medium text-zinc-900">Account Information:</span> When you create an account or tenant, we collect your email address and name (if provided). Passwords are stored as one-way hashes. We never store plaintext passwords. We also issue session tokens to keep you signed in.</li>
               <li><span className="font-medium text-zinc-900">Usage Data:</span> We collect information about how you and your AI agents interact with the Service, including API calls, snippet invocations, logs, and performance metrics.</li>
               <li><span className="font-medium text-zinc-900">Integration Data:</span> When you connect third-party services (via Nango or direct OAuth), we store connection metadata and tokens securely on your behalf. We never store or access the underlying data from those services unless explicitly invoked by your code.</li>
               <li><span className="font-medium text-zinc-900">Technical Data:</span> IP addresses, browser type, device information, and cookies for authentication and analytics.</li>

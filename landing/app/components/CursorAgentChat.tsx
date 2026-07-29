@@ -60,7 +60,7 @@ const script: Entry[] = [
   },
   {
     type: "assistant",
-    text: "Tested 3 times on dev — all passing. Should I publish to prod?",
+    text: "Tested 3 times on dev, all passing. Should I publish to prod?",
   },
   { type: "user", text: "Yes, ship it." },
   {
@@ -72,7 +72,7 @@ const script: Entry[] = [
   { type: "callout", endpoint: "api.velane.sh/v1/invoke/stripe-to-hubspot" },
   {
     type: "summary",
-    text: "Live in production. Tested 3 times on dev — all passing.",
+    text: "Live in production. Tested 3 times on dev, all passing.",
   },
 ];
 

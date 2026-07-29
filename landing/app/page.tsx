@@ -131,9 +131,9 @@ export default function Home() {
             />
             <div className="text-xl font-medium tracking-tight">Velane</div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-4">
             <a
-              className="hidden text-sm text-zinc-500 transition-colors hover:text-zinc-900 sm:inline-block"
+              className="rounded-full border border-black/10 px-3 py-1.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/5 hover:text-zinc-900"
               href="https://docs.velane.sh"
               target="_blank"
               rel="noreferrer"
@@ -141,21 +141,16 @@ export default function Home() {
               Docs
             </a>
             <a
-              className="hidden items-center gap-2 rounded-full border border-black/10 px-3 py-1.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/5 hover:text-zinc-900 sm:flex"
-              href="https://github.com/abskrj/velane"
-              target="_blank"
-              rel="noreferrer"
+              className="text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900"
+              href="https://app.velane.sh/login"
             >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-              </svg>
-              Star
+              Log in
             </a>
             <a
               className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-transform hover:scale-105 hover:bg-zinc-800"
-              href="https://app.velane.sh"
+              href="https://app.velane.sh/register"
             >
-              Start building
+              Get started
             </a>
           </div>
         </div>
@@ -175,19 +170,20 @@ export default function Home() {
           <div className="relative mx-auto grid w-full max-w-5xl gap-16 px-6 md:grid-cols-2 md:items-center">
             <div className="max-w-xl">
               <h1 className="text-5xl font-medium leading-[1.1] tracking-tight text-zinc-900 md:text-6xl">
-                Integration lifecycle infrastructure for AI agents
+                Cloud infrastructure for your agents and small apps
               </h1>
               <p className="mt-6 text-lg leading-relaxed text-zinc-600">
-                Give your agents one place to discover integrations, build and
-                test workflows, and promote them safely from development to
-                production, all without leaving the chat.
+                Deploy agents, APIs, and small software in your cloud with
+                versioning, environments, secrets, secure zero-cold-start
+                sandboxes, compliance controls, and 800+ integrations. Manage
+                it all from Claude, Codex, or Cursor.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-4">
                 <a
                   className="rounded-full bg-zinc-900 px-6 py-3 text-sm font-medium text-white shadow-md transition-all hover:scale-105 hover:bg-zinc-800 hover:shadow-lg"
-                  href="https://app.velane.sh"
+                  href="https://app.velane.sh/register"
                 >
-                  Connect your agent
+                  Get started
                 </a>
                 <a
                   className="inline-flex items-center gap-2 rounded-full border border-black/10 px-6 py-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/5"
@@ -203,7 +199,7 @@ export default function Home() {
                     aria-hidden
                     className="h-4 w-4 object-contain"
                   />
-                  View GitHub
+                  GitHub
                 </a>
               </div>
             </div>
@@ -241,7 +237,7 @@ export default function Home() {
               </h2>
               <p className="mx-auto mt-4 max-w-lg text-lg text-zinc-600">
                 Your agent discovers connected accounts and calls any API
-                through Velane — no OAuth flows, no credentials, no glue code.
+                through Velane. No OAuth flows, no credentials, no glue code.
               </p>
             </div>
 
@@ -289,11 +285,11 @@ export default function Home() {
                 Who it&apos;s for
               </p>
               <h2 className="text-3xl font-medium tracking-tight text-zinc-900">
-                Built for developers who ship with AI
+                Built for agents and the software around them
               </h2>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
-                Whether you&apos;re a solo developer or part of a larger team,
-                Velane fits the way you already work.
+                Give autonomous agents and human developers the same secure
+                cloud for building, running, and operating production code.
               </p>
             </div>
             <div className="grid gap-6 md:grid-cols-2">
@@ -316,19 +312,19 @@ export default function Home() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-medium text-zinc-900">
-                  Solo developers
+                  Agents and agent builders
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-                  You&apos;re building an AI agent and don&apos;t want to
-                  maintain a backend just to call Stripe or Slack. Velane
-                  handles the runtime, OAuth, and deployment pipeline so you
-                  can stay in your editor.
+                  Let agents write, test, debug, and publish real services
+                  without handing them a pile of cloud consoles. Velane
+                  provides the runtime, OAuth, environments, and deployment
+                  pipeline through MCP.
                 </p>
                 <ul className="mt-6 space-y-3">
                   {[
-                    "Ship integrations in one agent conversation",
+                    "Ship production code in one agent conversation",
                     "No OAuth plumbing or credential management",
-                    "Open source — self-host or use the hosted version",
+                    "Open source: self-host or use the hosted version",
                     "Sandboxed execution, no infra to manage",
                   ].map((item) => (
                     <li
@@ -355,7 +351,7 @@ export default function Home() {
                 </ul>
               </div>
 
-              {/* Teams */}
+              {/* Small apps */}
               <div className="rounded-2xl border border-black/5 bg-white p-8 shadow-sm">
                 <div className="mb-5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100">
                   <svg
@@ -375,18 +371,21 @@ export default function Home() {
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-zinc-900">Teams</h3>
+                <h3 className="text-lg font-medium text-zinc-900">
+                  Small apps and internal tools
+                </h3>
                 <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-                  Your agents need shared credentials, audit trails, and
-                  controlled rollouts. Velane gives every team member&apos;s
-                  agent the same integrations without anyone touching a secret.
+                  Deploy focused APIs, automations, webhooks, and internal
+                  tools without assembling a full cloud stack. Start small,
+                  connect to the services you use, and promote safely when
+                  you&apos;re ready.
                 </p>
                 <ul className="mt-6 space-y-3">
                   {[
-                    "Shared credential store — one OAuth connection per provider",
-                    "Environment promotion: dev → staging → prod",
-                    "Invocation logs and audit trail per tenant",
-                    "Role-based access: invoke, manage, admin scopes",
+                    "Secure HTTP endpoints in Bun or Python",
+                    "Sync, async, and streaming execution",
+                    "Built-in logs, secrets, and version history",
+                    "Development, staging, and production environments",
                   ].map((item) => (
                     <li
                       key={item}
@@ -430,7 +429,7 @@ export default function Home() {
                 Your IDE is now your deployment pipeline.
               </h2>
               <p className="mt-4 text-lg text-zinc-600">
-                One MCP connection. Your agent handles the rest — writing,
+                One MCP connection. Your agent handles the rest: writing,
                 testing, and shipping production workflows autonomously.
               </p>
             </div>
@@ -485,7 +484,7 @@ export default function Home() {
                   Run & Debug
                 </h3>
                 <p className="mt-3 leading-relaxed text-zinc-600">
-                  The agent invokes the workflow on dev, reads execution logs with <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">get_logs</code>, and autonomously fixes errors — all without leaving the chat window. Each run is isolated in an ephemeral sandbox.
+                  The agent invokes the workflow on dev, reads execution logs with <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">get_logs</code>, and autonomously fixes errors without leaving the chat window. Each run is isolated in an ephemeral sandbox.
                 </p>
               </div>
               <div className="group">
@@ -494,14 +493,14 @@ export default function Home() {
                 </div>
                 <h3 className="text-xl font-medium text-zinc-900">Promote</h3>
                 <p className="mt-3 leading-relaxed text-zinc-600">
-                  Once tests pass, the agent calls <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">publish_snippet</code> with <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">env: &quot;prod&quot;</code>. Your workflow goes live at a stable HTTP endpoint — versioned, audited, and rollback-ready.
+                  Once tests pass, the agent calls <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">publish_snippet</code> with <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">env: &quot;prod&quot;</code>. Your workflow goes live at a stable HTTP endpoint, versioned, audited, and rollback-ready.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Technical proof — dark */}
+        {/* Technical proof, dark */}
         <section className="relative overflow-hidden bg-zinc-900 py-24 text-white selection:bg-zinc-700">
           <div
             aria-hidden="true"
@@ -517,7 +516,7 @@ export default function Home() {
               </h2>
               <p className="mt-4 max-w-xl leading-relaxed text-zinc-400">
                 Add Velane to your MCP config, then your agent writes real
-                Bun or Python code. No credentials in code — the proxy
+                Bun or Python code. No credentials in code. The proxy
                 injects auth automatically.
               </p>
             </div>
@@ -676,9 +675,9 @@ export default function Home() {
                 Why not just use...
               </h2>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
-                Lambda handles execution. Pipedream handles workflows.
-                Neither was designed for AI agents that write, test, and
-                ship code autonomously.
+                Lambda gives you primitives. Pipedream focuses on workflows.
+                Velane gives agents and small apps a complete path from code
+                to a secure, observable production endpoint.
               </p>
             </div>
 
@@ -785,7 +784,7 @@ export default function Home() {
                 </ul>
               </div>
 
-              {/* Hobby — highlighted */}
+              {/* Hobby, highlighted */}
               <div className="relative flex flex-col rounded-2xl bg-zinc-900 p-8 shadow-xl">
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full border border-white/10 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300">
                   Most popular
@@ -885,7 +884,7 @@ export default function Home() {
               Self-host
             </p>
             <div className="grid gap-5 md:grid-cols-2">
-              {/* AGPL — free */}
+              {/* AGPL, free */}
               <div className="flex flex-col rounded-2xl border border-black/5 bg-white p-8 shadow-sm">
                 <div className="mb-6">
                   <h3 className="text-base font-semibold text-zinc-900">
@@ -916,7 +915,7 @@ export default function Home() {
                     "Deploy on your own infra",
                     "OpenTofu configs for EKS included",
                     "Community support via GitHub Issues",
-                    "AGPL-3.0 — changes must stay open source",
+                    "AGPL-3.0: changes must stay open source",
                   ].map((f) => (
                     <li
                       key={f}
@@ -958,7 +957,7 @@ export default function Home() {
                 </a>
                 <ul className="mt-8 flex-1 space-y-3">
                   {[
-                    "Commercial license — no copyleft obligations",
+                    "Commercial license: no copyleft obligations",
                     "Self-host on your own infra",
                     "Full source code access",
                     "Priority email support",
@@ -997,11 +996,11 @@ export default function Home() {
           />
           <div className="relative mx-auto w-full max-w-5xl px-6">
             <h2 className="text-4xl font-medium tracking-tight text-zinc-900">
-              Your agent is waiting for a runtime.
+              Your next agent or small app needs a cloud.
             </h2>
             <p className="mx-auto mt-6 max-w-xl text-lg text-zinc-600">
-              Add two lines to your MCP config and let your agent ship its
-              first workflow in minutes.
+              Connect your agent through MCP or deploy directly, then ship a
+              secure production endpoint in minutes.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <a
@@ -1037,7 +1036,7 @@ export default function Home() {
               Velane
             </div>
             <p className="text-sm text-zinc-500">
-              Integration infrastructure agents actually control.
+              Cloud infrastructure for agents and small apps.
             </p>
           </div>
 

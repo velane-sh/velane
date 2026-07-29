@@ -6,9 +6,9 @@ sidebar_position: 3
 
 # Agent Workflows
 
-Velane Bun and Python executors ship with **Mastra** (Bun) and **LangGraph** (Python) pre-installed. Use them directly in workflow code — no Velane wrapper packages.
+Velane Bun and Python executors ship with **Mastra** (Bun) and **LangGraph** (Python) pre-installed. Use them directly in workflow code. No Velane wrapper packages are needed.
 
-## Python — LangGraph
+## Python: LangGraph
 
 Store `OPENAI_API_KEY` (or other provider keys) as tenant secrets. They are injected as environment variables at invoke time.
 
@@ -25,7 +25,7 @@ def handler(input: dict) -> dict:
 
 For streaming, use an async generator handler and `yield` chunks (see [Invocation Modes](../invoke/invocation-modes.md)).
 
-## Bun — Mastra
+## Bun: Mastra
 
 ```typescript
 import { Agent } from '@mastra/core/agent'

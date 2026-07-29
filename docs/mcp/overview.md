@@ -62,7 +62,7 @@ Current resources:
 | URI | Purpose |
 |---|---|
 | `velane://runtime/contract` | Workflow handler shapes, integration helper usage, invocation/logging rules, and recommended MCP workflow. |
-| `velane://runtime/agent-frameworks` | Mastra (Bun) and LangGraph (Python) — **read before writing AI agent workflows**. |
+| `velane://runtime/agent-frameworks` | Mastra (Bun) and LangGraph (Python). **Read before writing AI agent workflows**. |
 | `velane://workflows` | Compact first page of workflows. The response is bounded and omits code. Use `get_workflow` for code, versions, and active environments. |
 | `velane://connections` | Compact first page of connected integrations. Use `list_connections` for filtering and pagination. |
 
