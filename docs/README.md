@@ -1,26 +1,30 @@
 ---
 title: Documentation Home
-description: Feature-first onboarding documentation for Velane.
+description: Build and deploy agents, APIs, and small software with Velane.
 sidebar_label: Home
 sidebar_position: 1
 ---
 
 # Velane Documentation
 
-Velane is an AI agent runtime for shipping Bun and Python snippets as production APIs.
+Velane is cloud infrastructure for deploying agents, APIs, and small software
+within your cloud. Build and manage production services from Claude, Codex, or
+Cursor, or use the API, CLI, and admin portal directly.
 
 Use Velane to:
 
-- deploy snippet versions across `dev`, `staging`, and `prod`
+- version and deploy code across `dev`, `staging`, and `prod`
+- manage secrets and runtime limits for secure sandboxed execution
 - invoke code with sync, async, or streaming modes
 - connect to 800+ OAuth integrations without handling provider tokens in snippet code
-- operate multi-tenant workloads with scopes, tenancy boundaries, and operational controls
+- operate multi-tenant workloads with scopes, tenancy boundaries, and compliance controls
 - build agent-native workflows with first-class MCP support
 
 ## Who Velane is for
 
-- Product teams building agent-powered features
-- Platform teams operating internal snippet runtimes
+- Product teams shipping agents and AI-powered features
+- Developers building APIs, automations, and lightweight software
+- Platform teams operating secure internal runtimes
 - AI engineers who want IDE-to-production workflows with MCP
 
 ## Choose your path

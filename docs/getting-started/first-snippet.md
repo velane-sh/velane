@@ -24,7 +24,7 @@ Use the built-in test panel in the snippet editor to run your snippet immediatel
 
 ## Invoke from the API
 
-Use an API key. The tenant is resolved from the key — it is not part of the invoke URL.
+Use an API key. The tenant is resolved from the key. It is not part of the invoke URL.
 
 ```bash
 KEY=vl_xxxx

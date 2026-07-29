@@ -8,7 +8,7 @@ const useAlgolia = Boolean(algoliaAppId && algoliaApiKey && algoliaIndexName)
 
 const config: Config = {
   title: 'Velane Docs',
-  tagline: 'Integration infrastructure agents actually control.',
+  tagline: 'Cloud infrastructure for your agents and small apps.',
 
   url: 'https://docs.velane.sh',
   baseUrl: '/',
