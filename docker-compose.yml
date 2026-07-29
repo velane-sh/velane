@@ -98,6 +98,7 @@ services:
 
   bun-executor:
     image: ghcr.io/abskrj/velane-bun-executor:latest
+    pull_policy: always
     ports:
       - "8081:8080"
     restart: unless-stopped
@@ -106,6 +107,7 @@ services:
 
   python-executor:
     image: ghcr.io/abskrj/velane-python-executor:latest
+    pull_policy: always
     ports:
       - "8082:8080"
     restart: unless-stopped
@@ -114,6 +116,7 @@ services:
 
   control-plane:
     image: ghcr.io/abskrj/velane-control-plane:latest
+    pull_policy: always
     ports:
       - "8080:8080"
     environment:
@@ -204,6 +207,7 @@ services:
 
   mcp-server:
     image: ghcr.io/abskrj/velane-mcp-server:latest
+    pull_policy: always
     ports:
       - "8090:8090"
     environment:
@@ -216,6 +220,7 @@ services:
 
   admin:
     image: ghcr.io/abskrj/velane-admin:latest
+    pull_policy: always
     ports:
       - "8092:80"
       - "3009:3009"
