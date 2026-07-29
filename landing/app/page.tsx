@@ -178,9 +178,10 @@ export default function Home() {
                 Cloud infrastructure for your agents and small apps
               </h1>
               <p className="mt-6 text-lg leading-relaxed text-zinc-600">
-                Build and run agents, APIs, automations, and small software in
-                one place — with sandboxed runtimes, managed integrations, and
-                a safe path from development to production.
+                Deploy agents, APIs, and small software with version control,
+                dev, staging, and production environments, secrets management,
+                zero-cold-start secure sandboxes, and 800+ integrations. All
+                within your cloud, with controls designed for compliance.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-4">
                 <a
@@ -241,7 +242,7 @@ export default function Home() {
               </h2>
               <p className="mx-auto mt-4 max-w-lg text-lg text-zinc-600">
                 Your agent discovers connected accounts and calls any API
-                through Velane — no OAuth flows, no credentials, no glue code.
+                through Velane. No OAuth flows, no credentials, no glue code.
               </p>
             </div>
 
@@ -328,7 +329,7 @@ export default function Home() {
                   {[
                     "Ship production code in one agent conversation",
                     "No OAuth plumbing or credential management",
-                    "Open source — self-host or use the hosted version",
+                    "Open source: self-host or use the hosted version",
                     "Sandboxed execution, no infra to manage",
                   ].map((item) => (
                     <li
@@ -433,7 +434,7 @@ export default function Home() {
                 Your IDE is now your deployment pipeline.
               </h2>
               <p className="mt-4 text-lg text-zinc-600">
-                One MCP connection. Your agent handles the rest — writing,
+                One MCP connection. Your agent handles the rest: writing,
                 testing, and shipping production workflows autonomously.
               </p>
             </div>
@@ -488,7 +489,7 @@ export default function Home() {
                   Run & Debug
                 </h3>
                 <p className="mt-3 leading-relaxed text-zinc-600">
-                  The agent invokes the workflow on dev, reads execution logs with <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">get_logs</code>, and autonomously fixes errors — all without leaving the chat window. Each run is isolated in an ephemeral sandbox.
+                  The agent invokes the workflow on dev, reads execution logs with <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">get_logs</code>, and autonomously fixes errors without leaving the chat window. Each run is isolated in an ephemeral sandbox.
                 </p>
               </div>
               <div className="group">
@@ -497,14 +498,14 @@ export default function Home() {
                 </div>
                 <h3 className="text-xl font-medium text-zinc-900">Promote</h3>
                 <p className="mt-3 leading-relaxed text-zinc-600">
-                  Once tests pass, the agent calls <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">publish_snippet</code> with <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">env: &quot;prod&quot;</code>. Your workflow goes live at a stable HTTP endpoint — versioned, audited, and rollback-ready.
+                  Once tests pass, the agent calls <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">publish_snippet</code> with <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono text-zinc-700">env: &quot;prod&quot;</code>. Your workflow goes live at a stable HTTP endpoint, versioned, audited, and rollback-ready.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Technical proof — dark */}
+        {/* Technical proof, dark */}
         <section className="relative overflow-hidden bg-zinc-900 py-24 text-white selection:bg-zinc-700">
           <div
             aria-hidden="true"
@@ -520,7 +521,7 @@ export default function Home() {
               </h2>
               <p className="mt-4 max-w-xl leading-relaxed text-zinc-400">
                 Add Velane to your MCP config, then your agent writes real
-                Bun or Python code. No credentials in code — the proxy
+                Bun or Python code. No credentials in code. The proxy
                 injects auth automatically.
               </p>
             </div>
@@ -788,7 +789,7 @@ export default function Home() {
                 </ul>
               </div>
 
-              {/* Hobby — highlighted */}
+              {/* Hobby, highlighted */}
               <div className="relative flex flex-col rounded-2xl bg-zinc-900 p-8 shadow-xl">
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full border border-white/10 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300">
                   Most popular
@@ -888,7 +889,7 @@ export default function Home() {
               Self-host
             </p>
             <div className="grid gap-5 md:grid-cols-2">
-              {/* AGPL — free */}
+              {/* AGPL, free */}
               <div className="flex flex-col rounded-2xl border border-black/5 bg-white p-8 shadow-sm">
                 <div className="mb-6">
                   <h3 className="text-base font-semibold text-zinc-900">
@@ -919,7 +920,7 @@ export default function Home() {
                     "Deploy on your own infra",
                     "OpenTofu configs for EKS included",
                     "Community support via GitHub Issues",
-                    "AGPL-3.0 — changes must stay open source",
+                    "AGPL-3.0: changes must stay open source",
                   ].map((f) => (
                     <li
                       key={f}
@@ -961,7 +962,7 @@ export default function Home() {
                 </a>
                 <ul className="mt-8 flex-1 space-y-3">
                   {[
-                    "Commercial license — no copyleft obligations",
+                    "Commercial license: no copyleft obligations",
                     "Self-host on your own infra",
                     "Full source code access",
                     "Priority email support",

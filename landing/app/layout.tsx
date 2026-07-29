@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Velane | Cloud Infrastructure for Agents and Small Apps",
   description:
-    "Deploy agents, APIs, automations, and small apps on Velane with sandboxed Bun and Python execution, 800+ OAuth integrations, and an MCP-native deployment pipeline.",
+    "Deploy agents, APIs, and small software with version control, managed environments, secrets, zero-cold-start secure sandboxes, and 800+ integrations, all within your cloud.",
 };
 
 export default function RootLayout({

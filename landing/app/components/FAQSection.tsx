@@ -6,17 +6,17 @@ const faqs = [
   {
     question: "Is Velane open source?",
     answer:
-      "Yes. Velane is dual-licensed under AGPL-3.0 for open-source use and a commercial license for proprietary deployments. You can inspect, fork, and self-host the full stack — the repo is on GitHub.",
+      "Yes. Velane is dual-licensed under AGPL-3.0 for open-source use and a commercial license for proprietary deployments. You can inspect, fork, and self-host the full stack. The repo is on GitHub.",
   },
   {
     question: "Where does my code run?",
     answer:
-      "Every invocation runs in a fully isolated Bun or Python sandbox on Velane's infrastructure. Sandboxes are ephemeral — spun up per request and torn down immediately after, so one workflow can never affect another.",
+      "Every invocation runs in a fully isolated Bun or Python sandbox on Velane's infrastructure. Sandboxes are ephemeral, spun up per request and torn down immediately after, so one workflow can never affect another.",
   },
   {
     question: "How are OAuth tokens and credentials managed?",
     answer:
-      "Credentials are handled entirely server-side. Your snippet code never sees raw tokens — it calls integrations through Velane's internal proxy endpoint, which exchanges tokens on the fly. Connections are stored encrypted at rest and never exposed to the browser or your agent.",
+      "Credentials are handled entirely server-side. Your snippet code never sees raw tokens. It calls integrations through Velane's internal proxy endpoint, which exchanges tokens on the fly. Connections are stored encrypted at rest and never exposed to the browser or your agent.",
   },
   {
     question: "Which AI agents does Velane support?",
@@ -26,7 +26,7 @@ const faqs = [
   {
     question: "Can I self-host Velane?",
     answer:
-      "Yes. The full stack — control plane, executor runtime, and MCP server — can be deployed on your own infrastructure. OpenTofu configs for EKS are included in the repo under infra/terraform/.",
+      "Yes. The full stack, including the control plane, executor runtime, and MCP server, can be deployed on your own infrastructure. OpenTofu configs for EKS are included in the repo under infra/terraform/.",
   },
   {
     question: "Is there a free tier?",
@@ -36,7 +36,7 @@ const faqs = [
   {
     question: "What happens if I hit an error during execution?",
     answer:
-      "Every invocation is logged with its full stdout, stderr, exit code, and duration. Your agent can call the get_logs MCP tool to read those logs directly in the chat and autonomously debug and retry — no context switching required.",
+      "Every invocation is logged with its full stdout, stderr, exit code, and duration. Your agent can call the get_logs MCP tool to read those logs directly in the chat and autonomously debug and retry without context switching.",
   },
 ];
 
