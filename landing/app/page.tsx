@@ -175,19 +175,19 @@ export default function Home() {
           <div className="relative mx-auto grid w-full max-w-5xl gap-16 px-6 md:grid-cols-2 md:items-center">
             <div className="max-w-xl">
               <h1 className="text-5xl font-medium leading-[1.1] tracking-tight text-zinc-900 md:text-6xl">
-                Integration lifecycle infrastructure for AI agents
+                Cloud infrastructure for your agents and small apps
               </h1>
               <p className="mt-6 text-lg leading-relaxed text-zinc-600">
-                Give your agents one place to discover integrations, build and
-                test workflows, and promote them safely from development to
-                production, all without leaving the chat.
+                Build and run agents, APIs, automations, and small software in
+                one place — with sandboxed runtimes, managed integrations, and
+                a safe path from development to production.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-4">
                 <a
                   className="rounded-full bg-zinc-900 px-6 py-3 text-sm font-medium text-white shadow-md transition-all hover:scale-105 hover:bg-zinc-800 hover:shadow-lg"
                   href="https://app.velane.sh"
                 >
-                  Connect your agent
+                  Start building
                 </a>
                 <a
                   className="inline-flex items-center gap-2 rounded-full border border-black/10 px-6 py-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/5"
@@ -289,11 +289,11 @@ export default function Home() {
                 Who it&apos;s for
               </p>
               <h2 className="text-3xl font-medium tracking-tight text-zinc-900">
-                Built for developers who ship with AI
+                Built for agents and the software around them
               </h2>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
-                Whether you&apos;re a solo developer or part of a larger team,
-                Velane fits the way you already work.
+                Give autonomous agents and human developers the same secure
+                cloud for building, running, and operating production code.
               </p>
             </div>
             <div className="grid gap-6 md:grid-cols-2">
@@ -316,17 +316,17 @@ export default function Home() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-medium text-zinc-900">
-                  Solo developers
+                  Agents and agent builders
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-                  You&apos;re building an AI agent and don&apos;t want to
-                  maintain a backend just to call Stripe or Slack. Velane
-                  handles the runtime, OAuth, and deployment pipeline so you
-                  can stay in your editor.
+                  Let agents write, test, debug, and publish real services
+                  without handing them a pile of cloud consoles. Velane
+                  provides the runtime, OAuth, environments, and deployment
+                  pipeline through MCP.
                 </p>
                 <ul className="mt-6 space-y-3">
                   {[
-                    "Ship integrations in one agent conversation",
+                    "Ship production code in one agent conversation",
                     "No OAuth plumbing or credential management",
                     "Open source — self-host or use the hosted version",
                     "Sandboxed execution, no infra to manage",
@@ -355,7 +355,7 @@ export default function Home() {
                 </ul>
               </div>
 
-              {/* Teams */}
+              {/* Small apps */}
               <div className="rounded-2xl border border-black/5 bg-white p-8 shadow-sm">
                 <div className="mb-5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100">
                   <svg
@@ -375,18 +375,21 @@ export default function Home() {
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-zinc-900">Teams</h3>
+                <h3 className="text-lg font-medium text-zinc-900">
+                  Small apps and internal tools
+                </h3>
                 <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-                  Your agents need shared credentials, audit trails, and
-                  controlled rollouts. Velane gives every team member&apos;s
-                  agent the same integrations without anyone touching a secret.
+                  Deploy focused APIs, automations, webhooks, and internal
+                  tools without assembling a full cloud stack. Start small,
+                  connect to the services you use, and promote safely when
+                  you&apos;re ready.
                 </p>
                 <ul className="mt-6 space-y-3">
                   {[
-                    "Shared credential store — one OAuth connection per provider",
-                    "Environment promotion: dev → staging → prod",
-                    "Invocation logs and audit trail per tenant",
-                    "Role-based access: invoke, manage, admin scopes",
+                    "Secure HTTP endpoints in Bun or Python",
+                    "Sync, async, and streaming execution",
+                    "Built-in logs, secrets, and version history",
+                    "Development, staging, and production environments",
                   ].map((item) => (
                     <li
                       key={item}
@@ -676,9 +679,9 @@ export default function Home() {
                 Why not just use...
               </h2>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
-                Lambda handles execution. Pipedream handles workflows.
-                Neither was designed for AI agents that write, test, and
-                ship code autonomously.
+                Lambda gives you primitives. Pipedream focuses on workflows.
+                Velane gives agents and small apps a complete path from code
+                to a secure, observable production endpoint.
               </p>
             </div>
 
@@ -997,11 +1000,11 @@ export default function Home() {
           />
           <div className="relative mx-auto w-full max-w-5xl px-6">
             <h2 className="text-4xl font-medium tracking-tight text-zinc-900">
-              Your agent is waiting for a runtime.
+              Your next agent or small app needs a cloud.
             </h2>
             <p className="mx-auto mt-6 max-w-xl text-lg text-zinc-600">
-              Add two lines to your MCP config and let your agent ship its
-              first workflow in minutes.
+              Connect your agent through MCP or deploy directly, then ship a
+              secure production endpoint in minutes.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <a
@@ -1037,7 +1040,7 @@ export default function Home() {
               Velane
             </div>
             <p className="text-sm text-zinc-500">
-              Integration infrastructure agents actually control.
+              Cloud infrastructure for agents and small apps.
             </p>
           </div>
 
