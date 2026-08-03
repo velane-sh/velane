@@ -73,6 +73,8 @@ resource "kubernetes_secret_v1" "control_plane" {
     REDIS_URL                              = var.redis_url
     ENCRYPTION_KEY                         = var.encryption_key
     JWT_PRIVATE_KEY                        = var.jwt_private_key_pem
+    SSO_SAML_PRIVATE_KEY                   = var.sso_saml_private_key_pem
+    SSO_SAML_CERTIFICATE                   = var.sso_saml_certificate_pem
     BOOTSTRAP_EMAIL                        = var.bootstrap_email
     BOOTSTRAP_PASSWORD                     = var.bootstrap_password
     BOOTSTRAP_TENANT                       = var.bootstrap_tenant
@@ -415,6 +417,26 @@ resource "kubernetes_deployment_v1" "control_plane" {
               secret_key_ref {
                 name = kubernetes_secret_v1.control_plane.metadata[0].name
                 key  = "JWT_PRIVATE_KEY"
+              }
+            }
+          }
+
+          env {
+            name = "SSO_SAML_PRIVATE_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.control_plane.metadata[0].name
+                key  = "SSO_SAML_PRIVATE_KEY"
+              }
+            }
+          }
+
+          env {
+            name = "SSO_SAML_CERTIFICATE"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.control_plane.metadata[0].name
+                key  = "SSO_SAML_CERTIFICATE"
               }
             }
           }

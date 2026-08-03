@@ -45,6 +45,11 @@ REPLACE_ME
 -----END PRIVATE KEY-----
 EOT
 
+# Stable SAML SP signing pair. Publish the replacement certificate to every IdP
+# before rotating these values, then re-test each tenant connection.
+sso_saml_private_key_pem = ""
+sso_saml_certificate_pem = ""
+
 # =============================================================================
 # BOOTSTRAP  (first deploy only — remove after first successful boot)
 # =============================================================================

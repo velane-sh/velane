@@ -11,10 +11,10 @@ type User struct {
 }
 
 type Session struct {
-	ID           string    `json:"id"`
+	ID             string    `json:"id"`
 	UserID         string    `json:"user_id"`
 	Token          string    `json:"token,omitempty"` // raw access token, only set on creation
-	RefreshToken   string    `json:"-"`                 // raw refresh token, only set on creation
+	RefreshToken   string    `json:"-"`               // raw refresh token, only set on creation
 	TokenHash      string    `json:"-"`
 	ExpiresAt      time.Time `json:"expires_at"`
 	RefreshExpires time.Time `json:"-"`
@@ -22,13 +22,16 @@ type Session struct {
 }
 
 type RefreshToken struct {
-	ID        string     `json:"id"`
-	UserID    string     `json:"user_id"`
-	Token     string     `json:"token,omitempty"` // raw, only on creation
-	TokenHash string     `json:"-"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID              string     `json:"id"`
+	UserID          string     `json:"user_id"`
+	Token           string     `json:"token,omitempty"` // raw, only on creation
+	TokenHash       string     `json:"-"`
+	ExpiresAt       time.Time  `json:"expires_at"`
+	RevokedAt       *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	AuthMethod      string     `json:"auth_method"`
+	SSOTenantID     string     `json:"sso_tenant_id,omitempty"`
+	SSOConnectionID string     `json:"sso_connection_id,omitempty"`
 }
 
 type TenantMember struct {

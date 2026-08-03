@@ -13,11 +13,12 @@ import (
 type sessionContextKey string
 
 const (
-	sessionUserKey    sessionContextKey = "session_user"
-	sessionRoleKey    sessionContextKey = "session_role"
-	SessionCookieName                   = "velane_session"
-	RefreshCookieName                   = "velane_refresh"
-	ActiveOrgCookieName                 = "velane_active_org"
+	sessionUserKey      sessionContextKey = "session_user"
+	sessionRoleKey      sessionContextKey = "session_role"
+	sessionAssuranceKey sessionContextKey = "session_assurance"
+	SessionCookieName                     = "velane_session"
+	RefreshCookieName                     = "velane_refresh"
+	ActiveOrgCookieName                   = "velane_active_org"
 )
 
 // SessionStore is the subset of the store needed by SessionAuth to resolve tenant membership.
@@ -44,14 +45,37 @@ func SessionAuth(provider auth.Provider, store SessionStore, log *zap.Logger) fu
 			}
 
 			ctx := context.WithValue(r.Context(), sessionUserKey, user)
+			assurance := models.SessionAssurance{AuthMethod: "local"}
+			if jwtProvider, ok := provider.(*auth.JWTProvider); ok {
+				if parsed, parseErr := jwtProvider.SessionAssurance(raw); parseErr == nil {
+					assurance = parsed
+				}
+			}
+			ctx = context.WithValue(ctx, sessionAssuranceKey, assurance)
 
 			if store != nil {
 				if memberships, err := store.ListUserTenantMemberships(ctx, user.ID); err == nil && len(memberships) > 0 {
 					selected := memberships[0]
+					if assurance.SSOTenantID != "" {
+						selected = nil
+						for _, membership := range memberships {
+							if membership.TenantID == assurance.SSOTenantID {
+								selected = membership
+								break
+							}
+						}
+						if selected == nil {
+							next.ServeHTTP(w, r.WithContext(ctx))
+							return
+						}
+					}
 					if cookie, err := r.Cookie(ActiveOrgCookieName); err == nil {
 						cookieSlug := strings.TrimSpace(cookie.Value)
 						if cookieSlug != "" {
 							for _, membership := range memberships {
+								if assurance.SSOTenantID != "" && membership.TenantID != assurance.SSOTenantID {
+									continue
+								}
 								if membership.Slug == cookieSlug {
 									selected = membership
 									break
@@ -99,4 +123,12 @@ func SessionUserFromContext(ctx context.Context) *models.User {
 func SessionRoleFromContext(ctx context.Context) string {
 	r, _ := ctx.Value(sessionRoleKey).(string)
 	return r
+}
+
+func SessionAssuranceFromContext(ctx context.Context) models.SessionAssurance {
+	a, _ := ctx.Value(sessionAssuranceKey).(models.SessionAssurance)
+	if a.AuthMethod == "" {
+		a.AuthMethod = "local"
+	}
+	return a
 }

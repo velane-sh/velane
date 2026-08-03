@@ -243,11 +243,17 @@ func EncryptForTest(key []byte, plaintext string) (string, error) {
 	return encrypt(key, plaintext)
 }
 
+// EncryptValue encrypts sensitive configuration using the service AES-256-GCM key.
+func EncryptValue(key []byte, plaintext string) (string, error) { return encrypt(key, plaintext) }
+
 // DecryptForTest is an exported wrapper around decrypt for use in tests.
 // It should not be used in production code.
 func DecryptForTest(key []byte, encoded string) (string, error) {
 	return decrypt(key, encoded)
 }
+
+// DecryptValue decrypts configuration previously encrypted by EncryptValue.
+func DecryptValue(key []byte, encoded string) (string, error) { return decrypt(key, encoded) }
 
 // scanSecret scans a secret row from RETURNING clauses (no value_encrypted).
 func scanSecret(s scannable) (*models.Secret, error) {

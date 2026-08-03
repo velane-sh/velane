@@ -12,6 +12,7 @@ Use this checklist before go-live.
 
 - Set stable `ENCRYPTION_KEY`
 - Set stable `JWT_PRIVATE_KEY`
+- Set a stable `SSO_SAML_PRIVATE_KEY` / `SSO_SAML_CERTIFICATE` pair and document its rotation owner
 - Remove bootstrap credentials after first setup
 - Use scoped API keys (least privilege)
 
