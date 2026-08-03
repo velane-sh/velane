@@ -66,6 +66,7 @@ func NewRegistry() *Registry {
 			{Name: "snippet_id", Description: "Deprecated alias for workflow_id.", Required: false},
 		},
 	})
+	r.add(Prompt{Name: "create_event_workflow", Description: "Create, test, publish, and explicitly enable a Nango sync event workflow.", Arguments: []Argument{{Name: "connection_id", Description: "Velane connection ID.", Required: true}, {Name: "goal", Description: "How to process model changes.", Required: true}, {Name: "language", Description: "bun or python.", Required: false}, {Name: "env", Description: "Target environment, default dev.", Required: false}}})
 	r.add(Prompt{
 		Name:        "publish_after_validation",
 		Description: "Validate the latest workflow version and publish the exact version number to a target environment.",
@@ -105,6 +106,8 @@ func (r *Registry) Get(name string, args map[string]any) (Prompt, []Message, err
 		text = debugFailedInvocationPrompt(args)
 	case "publish_after_validation":
 		text = publishAfterValidationPrompt(args)
+	case "create_event_workflow":
+		text = createEventWorkflowPrompt(args)
 	default:
 		return Prompt{}, nil, fmt.Errorf("prompt not implemented: %s", name)
 	}
@@ -116,6 +119,26 @@ func (r *Registry) Get(name string, args map[string]any) (Prompt, []Message, err
 			Text: text,
 		},
 	}}, nil
+}
+
+func createEventWorkflowPrompt(args map[string]any) string {
+	return strings.TrimSpace(fmt.Sprintf(`Create a Velane Nango sync event workflow.
+
+Connection: %s
+Goal: %s
+Language: %s
+Target environment: %s
+
+Follow this sequence exactly:
+1. Read velane://runtime/event-triggers (or call get_event_trigger_docs).
+2. Call list_integration_event_models for the connection and choose the deployed model; use a validated manual model only when manual_entry=true.
+3. Create the handler with idempotent batch processing, deletion/partial-record handling, and integration(provider, { alias }).
+4. Invoke in dev with a representative event envelope and fix all failures.
+5. Publish the exact successfully tested version to the target environment.
+6. Create the workflow trigger disabled with create_workflow_trigger.
+7. Ask for explicit confirmation before update_workflow_trigger enables it.
+
+Return the workflow/version, model, test invocation, trigger ID, and enabled state.`, argString(args, "connection_id", "<connection>"), argString(args, "goal", "<goal>"), argString(args, "language", "bun"), argString(args, "env", "dev")))
 }
 
 func (r *Registry) add(prompt Prompt) {

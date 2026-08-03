@@ -340,6 +340,10 @@ Do not hand-roll custom agent loops — use the preinstalled frameworks.`,
 			if err := r.client.Get(ctx, authHeader, "/v1/snippets/"+esc+"/environments", &environments); err != nil {
 				environments = nil
 			}
+			var triggers []map[string]any
+			if err := r.client.Get(ctx, authHeader, "/v1/snippets/"+esc+"/triggers", &triggers); err != nil {
+				triggers = nil
+			}
 
 			// Surface the latest version's code directly for convenience.
 			var activeCode string
@@ -353,6 +357,7 @@ Do not hand-roll custom agent loops — use the preinstalled frameworks.`,
 				"workflow":     snippet,
 				"versions":     versions,
 				"environments": environments,
+				"triggers":     triggers,
 				"latest_code":  activeCode,
 			}, nil
 		},
@@ -592,11 +597,11 @@ For agent workflows set higher limits via timeout_ms, max_memory_mb (e.g. 512), 
 			"properties": map[string]any{
 				"workflow_id": map[string]any{"type": "string", "description": "Workflow ID."},
 				"snippet_id":  map[string]any{"type": "string", "description": "Deprecated alias for workflow_id."},
-				"limit":      map[string]any{"type": "integer"},
-				"status":     map[string]any{"type": "string"},
-				"env":        map[string]any{"type": "string"},
-				"start_time": map[string]any{"type": "string"},
-				"end_time":   map[string]any{"type": "string"},
+				"limit":       map[string]any{"type": "integer"},
+				"status":      map[string]any{"type": "string"},
+				"env":         map[string]any{"type": "string"},
+				"start_time":  map[string]any{"type": "string"},
+				"end_time":    map[string]any{"type": "string"},
 			},
 		},
 		Handle: func(ctx context.Context, authHeader string, args map[string]any) (any, error) {
@@ -720,7 +725,7 @@ For agent workflows set higher limits via timeout_ms, max_memory_mb (e.g. 512), 
 			"properties": map[string]any{
 				"workflow_id": map[string]any{"type": "string", "description": "Workflow ID."},
 				"snippet_id":  map[string]any{"type": "string", "description": "Deprecated alias for workflow_id."},
-				"window":     map[string]any{"type": "string", "enum": []string{"1h", "24h", "7d"}},
+				"window":      map[string]any{"type": "string", "enum": []string{"1h", "24h", "7d"}},
 			},
 		},
 		Handle: func(ctx context.Context, authHeader string, args map[string]any) (any, error) {
@@ -741,4 +746,61 @@ For agent workflows set higher limits via timeout_ms, max_memory_mb (e.g. 512), 
 			return out, nil
 		},
 	})
+	r.add(Tool{Name: "get_event_trigger_docs", Description: "Read the Nango sync event envelope and reliability contract before writing an event workflow.", InputSchema: map[string]any{"type": "object", "properties": map[string]any{}}, Handle: func(ctx context.Context, authHeader string, args map[string]any) (any, error) {
+		return map[string]any{"resource": "velane://runtime/event-triggers", "envelope": map[string]any{"id": "stable receipt id", "source": "nango", "provider": "provider slug", "connection": map[string]any{"id": "connection id", "alias": "default"}, "event": map[string]any{"type": "sync.records.changed", "model": "Model", "modified_after": "RFC3339 cursor"}, "changes": map[string]any{"records": []any{map[string]any{"action": "added|updated|deleted", "data": map[string]any{}}}}, "batch": map[string]any{"index": 1, "count": 1, "is_last": true}}, "requirements": []string{"Trigger configuration is separate from workflow code.", "Test a representative envelope before exact-version publication and explicit enablement.", "Delivery is at least once; use receipt id and batch index for idempotency.", "Handle bounded batches, retries, deletion tombstones, and partial records.", "Use integration(provider, { alias: input.connection.alias })."}}, nil
+	}})
+	r.add(Tool{Name: "list_integration_event_models", Description: "Discover deployed Nango sync models for a connection. manual_entry=true means this Nango installation cannot enumerate them.", InputSchema: map[string]any{"type": "object", "required": []string{"connection_id"}, "properties": map[string]any{"connection_id": map[string]any{"type": "string"}}}, Handle: func(ctx context.Context, a string, args map[string]any) (any, error) {
+		id, e := toString(args, "connection_id", true)
+		if e != nil {
+			return nil, e
+		}
+		var out map[string]any
+		e = r.client.Get(ctx, a, "/v1/connections/"+url.PathEscape(id)+"/sync-models", &out)
+		return out, e
+	}})
+	r.add(Tool{Name: "list_workflow_triggers", Description: "List Nango sync triggers and recent delivery state for a workflow.", InputSchema: map[string]any{"type": "object", "required": []string{"workflow_id"}, "properties": map[string]any{"workflow_id": map[string]any{"type": "string"}}}, Handle: func(ctx context.Context, a string, args map[string]any) (any, error) {
+		id, e := toWorkflowID(args, true)
+		if e != nil {
+			return nil, e
+		}
+		var out []map[string]any
+		e = r.client.Get(ctx, a, "/v1/snippets/"+url.PathEscape(id)+"/triggers", &out)
+		return out, e
+	}})
+	triggerSchema := map[string]any{"type": "object", "required": []string{"workflow_id", "connection_id", "model", "environment"}, "properties": map[string]any{"workflow_id": map[string]any{"type": "string"}, "connection_id": map[string]any{"type": "string"}, "model": map[string]any{"type": "string"}, "environment": map[string]any{"type": "string", "enum": []string{"dev", "staging", "prod"}}, "change_types": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"added", "updated", "deleted"}}}}}
+	r.add(Tool{Name: "create_workflow_trigger", Description: "Create a disabled workflow trigger. Enable it only after representative testing and exact-version publication.", InputSchema: triggerSchema, Handle: func(ctx context.Context, a string, args map[string]any) (any, error) {
+		id, e := toWorkflowID(args, true)
+		if e != nil {
+			return nil, e
+		}
+		body := map[string]any{"connection_id": args["connection_id"], "model": args["model"], "environment": args["environment"], "change_types": args["change_types"]}
+		var out map[string]any
+		e = r.client.Post(ctx, a, "/v1/snippets/"+url.PathEscape(id)+"/triggers", body, &out)
+		return out, e
+	}})
+	r.add(Tool{Name: "update_workflow_trigger", Description: "Enable, disable, or update a workflow trigger.", InputSchema: map[string]any{"type": "object", "required": []string{"workflow_id", "trigger_id", "model", "environment", "change_types", "enabled"}, "properties": map[string]any{"workflow_id": map[string]any{"type": "string"}, "trigger_id": map[string]any{"type": "string"}, "model": map[string]any{"type": "string"}, "environment": map[string]any{"type": "string"}, "change_types": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "enabled": map[string]any{"type": "boolean"}}}, Handle: func(ctx context.Context, a string, args map[string]any) (any, error) {
+		wid, e := toWorkflowID(args, true)
+		if e != nil {
+			return nil, e
+		}
+		tid, e := toString(args, "trigger_id", true)
+		if e != nil {
+			return nil, e
+		}
+		var out map[string]any
+		e = r.client.Patch(ctx, a, "/v1/snippets/"+url.PathEscape(wid)+"/triggers/"+url.PathEscape(tid), args, &out)
+		return out, e
+	}})
+	r.add(Tool{Name: "delete_workflow_trigger", Description: "Permanently delete a workflow trigger (admin scope).", InputSchema: map[string]any{"type": "object", "required": []string{"workflow_id", "trigger_id"}, "properties": map[string]any{"workflow_id": map[string]any{"type": "string"}, "trigger_id": map[string]any{"type": "string"}}}, Handle: func(ctx context.Context, a string, args map[string]any) (any, error) {
+		wid, e := toWorkflowID(args, true)
+		if e != nil {
+			return nil, e
+		}
+		tid, e := toString(args, "trigger_id", true)
+		if e != nil {
+			return nil, e
+		}
+		e = r.client.Delete(ctx, a, "/v1/snippets/"+url.PathEscape(wid)+"/triggers/"+url.PathEscape(tid), nil)
+		return map[string]any{"deleted": e == nil}, e
+	}})
 }

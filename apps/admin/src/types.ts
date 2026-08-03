@@ -141,6 +141,20 @@ export interface Connection {
   updated_at: string
 }
 
+export interface WorkflowTrigger {
+  id: string
+  workflow_id: string
+  connection_id: string
+  provider_config_key: string
+  model: string
+  change_types: Array<'added' | 'updated' | 'deleted'>
+  environment: 'dev' | 'staging' | 'prod'
+  enabled: boolean
+  activated_at?: string
+  last_delivery_at?: string
+  last_error?: string
+}
+
 export interface ConnectionField {
   type: string
   title: string

@@ -6,11 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/abskrj/velane/services/control-plane/internal/models"
 	"github.com/abskrj/velane/services/control-plane/internal/nango"
+	redisstore "github.com/abskrj/velane/services/control-plane/internal/store/redis"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +20,12 @@ import (
 type NangoWebhookStore interface {
 	UpdateNangoConnectionID(ctx context.Context, tenantID, provider, alias, nangoConnID string) (*models.Connection, error)
 	UpdateNangoConnectionIDByProviderConfigKey(ctx context.Context, tenantID, providerConfigKey, nangoConnID string) (*models.Connection, error)
+	FindConnectionForNangoEvent(ctx context.Context, nangoID, configKey string) (*models.Connection, error)
+	CreateIntegrationEventReceipt(ctx context.Context, receipt *models.IntegrationEventReceipt) (bool, error)
+	DeletePendingIntegrationEventReceipt(ctx context.Context, id string) error
+}
+type IntegrationEventEnqueuer interface {
+	EnqueueIntegrationEvent(context.Context, redisstore.IntegrationEventJob) error
 }
 
 // NangoWebhookHandler handles POST /v1/webhooks/nango.
@@ -27,10 +35,15 @@ type NangoWebhookHandler struct {
 	webhookSecret string // NANGO_WEBHOOK_SECRET — dashboard webhook signing key
 	apiSecret     string // NANGO_SECRET_KEY — self-hosted Nango also signs with the env API secret
 	log           *zap.Logger
+	events        IntegrationEventEnqueuer
 }
 
 func NewNangoWebhookHandler(store NangoWebhookStore, nangoClient *nango.Client, webhookSecret, apiSecret string, log *zap.Logger) *NangoWebhookHandler {
 	return &NangoWebhookHandler{store: store, nango: nangoClient, webhookSecret: webhookSecret, apiSecret: apiSecret, log: log}
+}
+func (h *NangoWebhookHandler) WithIntegrationEvents(q IntegrationEventEnqueuer) *NangoWebhookHandler {
+	h.events = q
+	return h
 }
 
 // nangoWebhookPayload is the subset of Nango's webhook body that we care about.
@@ -39,6 +52,14 @@ type nangoWebhookPayload struct {
 	ConnectionID      string            `json:"connectionId"`
 	ProviderConfigKey string            `json:"providerConfigKey"`
 	Success           bool              `json:"success"`
+	Model             string            `json:"model"`
+	SyncName          string            `json:"syncName"`
+	ModifiedAfter     string            `json:"modifiedAfter"`
+	WebhookID         string            `json:"id"`
+	InitialSync       bool              `json:"initialSync"`
+	Added             int               `json:"added"`
+	Updated           int               `json:"updated"`
+	Deleted           int               `json:"deleted"`
 	Tags              map[string]string `json:"tags"`
 	EndUser           struct {
 		ID          string `json:"id"`
@@ -64,9 +85,13 @@ func (p *nangoWebhookPayload) tenantID() string {
 
 // HandleNangoEvent receives Nango webhook events and stores the real connection UUID.
 func (h *NangoWebhookHandler) HandleNangoEvent(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(r.Body, (1<<20)+1))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "failed to read body")
+		return
+	}
+	if len(body) > 1<<20 {
+		writeError(w, http.StatusRequestEntityTooLarge, "webhook payload too large")
 		return
 	}
 
@@ -82,6 +107,10 @@ func (h *NangoWebhookHandler) HandleNangoEvent(w http.ResponseWriter, r *http.Re
 	var payload nangoWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if payload.Type == "sync" || payload.Type == "sync.records.changed" || payload.Type == "sync_model_changed" {
+		h.handleSyncEvent(w, r, &payload, body)
 		return
 	}
 
@@ -139,6 +168,49 @@ func (h *NangoWebhookHandler) HandleNangoEvent(w http.ResponseWriter, r *http.Re
 		zap.String("nango_connection_id", nangoConnID),
 	)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *NangoWebhookHandler) handleSyncEvent(w http.ResponseWriter, r *http.Request, p *nangoWebhookPayload, body []byte) {
+	if p.ConnectionID == "" || p.ProviderConfigKey == "" || p.Model == "" || p.ModifiedAfter == "" {
+		writeError(w, http.StatusBadRequest, "missing required sync event fields")
+		return
+	}
+	conn, err := h.store.FindConnectionForNangoEvent(r.Context(), p.ConnectionID, p.ProviderConfigKey)
+	if err != nil {
+		h.log.Warn("nango sync event for unknown connection", zap.Error(err))
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+		return
+	}
+	key := p.WebhookID
+	if key == "" {
+		canonicalBody := body
+		var raw any
+		if json.Unmarshal(body, &raw) == nil {
+			if encoded, e := json.Marshal(raw); e == nil {
+				canonicalBody = encoded
+			}
+		}
+		canonical := fmt.Sprintf("%s\n%s\n%s\n%s\n%d\n%d\n%d\n%s", p.ConnectionID, p.ProviderConfigKey, p.Model, p.ModifiedAfter, p.Added, p.Updated, p.Deleted, string(canonicalBody))
+		sum := sha256.Sum256([]byte(canonical))
+		key = hex.EncodeToString(sum[:])
+	}
+	receipt := &models.IntegrationEventReceipt{DeduplicationKey: key, TenantID: conn.TenantID, ConnectionID: conn.ID, ProviderConfigKey: p.ProviderConfigKey, Model: p.Model, ModifiedAfter: p.ModifiedAfter, InitialSync: p.InitialSync, Payload: body}
+	created, err := h.store.CreateIntegrationEventReceipt(r.Context(), receipt)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "failed to persist event")
+		return
+	}
+	if !created {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "duplicate"})
+		return
+	}
+	if h.events == nil || h.events.EnqueueIntegrationEvent(r.Context(), redisstore.IntegrationEventJob{ReceiptID: receipt.ID}) != nil {
+		// Roll back only the still-pending receipt so Nango's retry can enqueue it.
+		_ = h.store.DeletePendingIntegrationEventReceipt(r.Context(), receipt.ID)
+		writeError(w, http.StatusServiceUnavailable, "failed to enqueue event")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted", "id": receipt.ID})
 }
 
 // verifyNangoWebhook checks Nango webhook signatures.

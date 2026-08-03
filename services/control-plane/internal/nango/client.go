@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -22,6 +23,107 @@ type Client struct {
 	providersMu       sync.RWMutex
 	providersCache    []models.NangoProvider
 	providersCachedAt time.Time
+}
+type SyncRecord struct {
+	ID     string         `json:"id"`
+	Data   map[string]any `json:"-"`
+	Action string         `json:"-"`
+}
+type RecordsPage struct {
+	Records    []SyncRecord
+	NextCursor string
+}
+
+// ListRecords fetches one page of an incremental Nango sync model result.
+func (c *Client) ListRecords(ctx context.Context, connectionID, providerConfigKey, model, modifiedAfter, cursor string) (*RecordsPage, error) {
+	q := url.Values{"connection_id": {connectionID}, "provider_config_key": {providerConfigKey}, "model": {model}, "limit": {"100"}}
+	if modifiedAfter != "" {
+		q.Set("modified_after", modifiedAfter)
+	}
+	if cursor != "" {
+		q.Set("cursor", cursor)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/records?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	c.setAuth(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("nango ListRecords: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("nango ListRecords %d: %s", resp.StatusCode, raw)
+	}
+	var out struct {
+		Records    []map[string]any `json:"records"`
+		NextCursor string           `json:"next_cursor"`
+		Cursor     string           `json:"cursor"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	p := &RecordsPage{NextCursor: out.NextCursor}
+	if p.NextCursor == "" {
+		p.NextCursor = out.Cursor
+	}
+	for _, raw := range out.Records {
+		action := "updated"
+		if v, ok := raw["_nango_metadata"].(map[string]any); ok {
+			if lastAction, _ := v["last_action"].(string); lastAction == "ADDED" || lastAction == "added" {
+				action = "added"
+			} else if lastAction == "DELETED" || lastAction == "deleted" {
+				action = "deleted"
+			} else if deleted, _ := v["deleted_at"].(string); deleted != "" {
+				action = "deleted"
+			} else if first, ok := v["first_seen_at"].(string); ok && first > modifiedAfter {
+				action = "added"
+			}
+		}
+		id, _ := raw["id"].(string)
+		p.Records = append(p.Records, SyncRecord{ID: id, Data: raw, Action: action})
+	}
+	return p, nil
+}
+
+// ListSyncModels uses Nango's deployed flow metadata. Older installations may
+// return 404; callers can then offer a validated manual model field.
+func (c *Client) ListSyncModels(ctx context.Context, providerConfigKey string) ([]string, error) {
+	req, e := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/flows?provider_config_key="+url.QueryEscape(providerConfigKey), nil)
+	if e != nil {
+		return nil, e
+	}
+	c.setAuth(req)
+	resp, e := c.httpClient.Do(req)
+	if e != nil {
+		return nil, e
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("nango sync model discovery unavailable (%d)", resp.StatusCode)
+	}
+	var out struct {
+		Data []struct {
+			Models   []string `json:"models"`
+			SyncName string   `json:"sync_name"`
+		} `json:"data"`
+	}
+	if e = json.NewDecoder(resp.Body).Decode(&out); e != nil {
+		return nil, e
+	}
+	seen := map[string]bool{}
+	var result []string
+	for _, f := range out.Data {
+		for _, m := range f.Models {
+			if !seen[m] {
+				seen[m] = true
+				result = append(result, m)
+			}
+		}
+	}
+	return result, nil
 }
 
 // New returns a Nango client pointing at baseURL (e.g. "http://nango:3003").

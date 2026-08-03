@@ -45,7 +45,9 @@ func (c *Client) Get(ctx context.Context, authHeader string, path string, out an
 func (c *Client) Post(ctx context.Context, authHeader string, path string, body any, out any) error {
 	return c.do(ctx, http.MethodPost, authHeader, path, body, out)
 }
-
+func (c *Client) Patch(ctx context.Context, authHeader, path string, body, out any) error {
+	return c.do(ctx, http.MethodPatch, authHeader, path, body, out)
+}
 func (c *Client) Put(ctx context.Context, authHeader string, path string, body any, out any) error {
 	return c.do(ctx, http.MethodPut, authHeader, path, body, out)
 }

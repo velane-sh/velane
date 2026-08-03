@@ -23,6 +23,7 @@ import type {
   NangoProvider,
   IntegrationConfig,
   MCPInfo,
+  WorkflowTrigger,
   SSOConnection,
   KVEntry,
   KVEntryList,
@@ -452,6 +453,22 @@ export const api = {
     if (offset !== undefined && offset >= 0) params.set('offset', String(Math.floor(offset)))
     const qs = params.toString()
     return request('GET', `/v1/tenant/connections${qs ? `?${qs}` : ''}`, undefined, 'apikey')
+  },
+
+  async listWorkflowTriggers(workflowId: string): Promise<WorkflowTrigger[]> {
+    return request('GET', `/v1/snippets/${workflowId}/triggers`, undefined, 'apikey')
+  },
+  async listIntegrationEventModels(connectionId: string): Promise<{ models: string[]; manual_entry: boolean }> {
+    return request('GET', `/v1/connections/${connectionId}/sync-models`, undefined, 'apikey')
+  },
+  async createWorkflowTrigger(workflowId: string, input: Pick<WorkflowTrigger, 'connection_id' | 'model' | 'change_types' | 'environment'>): Promise<WorkflowTrigger> {
+    return request('POST', `/v1/snippets/${workflowId}/triggers`, input, 'apikey')
+  },
+  async updateWorkflowTrigger(workflowId: string, trigger: WorkflowTrigger): Promise<WorkflowTrigger> {
+    return request('PATCH', `/v1/snippets/${workflowId}/triggers/${trigger.id}`, trigger, 'apikey')
+  },
+  async deleteWorkflowTrigger(workflowId: string, triggerId: string): Promise<void> {
+    return request('DELETE', `/v1/snippets/${workflowId}/triggers/${triggerId}`, undefined, 'apikey')
   },
 
   async createConnectionSession(

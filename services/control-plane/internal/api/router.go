@@ -16,6 +16,7 @@ import (
 	"github.com/abskrj/velane/services/control-plane/internal/platformlibs"
 	"github.com/abskrj/velane/services/control-plane/internal/scheduler"
 	"github.com/abskrj/velane/services/control-plane/internal/store/postgres"
+	redisstore "github.com/abskrj/velane/services/control-plane/internal/store/redis"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
@@ -23,15 +24,19 @@ import (
 
 // NewRouter builds and returns the fully configured chi router.
 func NewRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, nangoClient *nango.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, licMgr *license.Manager) *chi.Mux {
-	return newRouter(store, sched, log, encKey, authProvider, nil, nangoClient, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, handlers.OAuthConfig{}, licMgr)
+	return newRouter(store, sched, log, encKey, authProvider, nil, nangoClient, nil, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, handlers.OAuthConfig{}, licMgr)
 }
 
 // NewRouterWithJWT builds the router and wires the RSA public key for the JWKS endpoint.
 func NewRouterWithJWT(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager) *chi.Mux {
-	return newRouter(store, sched, log, encKey, authProvider, pubKey, nangoClient, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, oauthCfg, licMgr)
+	return newRouter(store, sched, log, encKey, authProvider, pubKey, nangoClient, nil, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, oauthCfg, licMgr)
 }
 
-func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager) *chi.Mux {
+func NewRouterWithJWTAndEvents(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, eventQueue *redisstore.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager) *chi.Mux {
+	return newRouter(store, sched, log, encKey, authProvider, pubKey, nangoClient, eventQueue, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, oauthCfg, licMgr)
+}
+
+func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, eventQueue *redisstore.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware.
@@ -53,6 +58,9 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	gitIntH := handlers.NewGitIntegrationHandler(store, log)
 	webhookH := handlers.NewWebhookHandler(store, sched, log)
 	nangoWebhookH := handlers.NewNangoWebhookHandler(store, nangoClient, nangoWebhookSecret, nangoSecretKey, log)
+	if eventQueue != nil {
+		nangoWebhookH.WithIntegrationEvents(eventQueue)
+	}
 	logsH := handlers.NewLogsHandler(store, log)
 	metricsH := handlers.NewMetricsHandler(store, log)
 	replayH := handlers.NewReplayHandler(store, sched, log)
@@ -60,6 +68,7 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	connectionsH := handlers.NewConnectionsHandler(store, nangoClient, log, nangoConnectURL, nangoApiURL).WithAuditor(auditor)
 	integrationsH := handlers.NewIntegrationsHandler(nangoClient, log, nangoInternalURL, nangoApiURL, mcpPublicURL)
 	configureIntH := handlers.NewConfigureIntegrationsHandler(store, nangoClient, log, encKey)
+	triggersH := handlers.NewWorkflowTriggersHandler(store, nangoClient, log)
 	adminAuthH := handlers.NewAdminAuthHandler(authProvider, store, log)
 	if pubKey != nil {
 		adminAuthH = adminAuthH.WithPublicKey(pubKey)
@@ -238,6 +247,7 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 		// (auth middleware resolves tenant from the Bearer token).
 		r.With(middleware.RequireScope("invoke", log)).
 			Get("/v1/connections", connectionsH.ListConnectionsForToken)
+		r.With(middleware.RequireScope("invoke", log)).Get("/v1/connections/{connectionID}/sync-models", triggersH.Models)
 
 		// Snippets.
 		r.Get("/v1/snippets", snippetsH.ListSnippets)
@@ -246,6 +256,10 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 		r.Get("/v1/snippets/{snippetID}", snippetsH.GetSnippet)
 		r.With(middleware.RequireScope("manage", log)).
 			Delete("/v1/snippets/{snippetID}", snippetsH.DeleteSnippet)
+		r.With(middleware.RequireScope("invoke", log)).Get("/v1/snippets/{snippetID}/triggers", triggersH.List)
+		r.With(middleware.RequireScope("manage", log)).Post("/v1/snippets/{snippetID}/triggers", triggersH.Create)
+		r.With(middleware.RequireScope("manage", log)).Patch("/v1/snippets/{snippetID}/triggers/{triggerID}", triggersH.Update)
+		r.With(middleware.RequireScope("admin", log)).Delete("/v1/snippets/{snippetID}/triggers/{triggerID}", triggersH.Delete)
 
 		// Versions.
 		r.Get("/v1/snippets/{snippetID}/environments", versionsH.ListEnvironments)

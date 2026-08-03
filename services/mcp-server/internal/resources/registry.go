@@ -50,6 +50,7 @@ func (r *Registry) List() []Resource {
 			Description: "Mastra (Bun) and LangGraph (Python) — required for AI agent workflows. Read before writing agent code.",
 			MimeType:    "text/markdown",
 		},
+		{URI: "velane://runtime/event-triggers", Name: "Integration event trigger guide", Description: "Nango sync event envelope, batching, retries, and idempotent workflow patterns.", MimeType: "text/markdown"},
 		{
 			Name:        "Workflow catalog",
 			Description: "Compact first page of workflows for this tenant. Use get_workflow for code and versions.",
@@ -78,6 +79,8 @@ func (r *Registry) Read(ctx context.Context, authHeader, uri string) ([]Content,
 			MimeType: "text/markdown",
 			Text:     agentdocs.Doc,
 		}}, nil
+	case "velane://runtime/event-triggers":
+		return []Content{{URI: uri, MimeType: "text/markdown", Text: eventTriggerDocs}}, nil
 	case "velane://workflows", "velane://snippets":
 		text, err := r.readWorkflowCatalog(ctx, authHeader)
 		if err != nil {
@@ -219,6 +222,8 @@ For chatbots, tool-using agents, or multi-step LLM reasoning, **use the preinsta
 
 Read ` + "`velane://runtime/agent-frameworks`" + ` or call **get_agent_framework_docs** before writing agent code.
 
+For Nango sync-driven workflows, read ` + "`velane://runtime/event-triggers`" + ` before implementing the handler.
+
 Set higher runtime limits in update_draft for agent workflows (e.g. max_memory_mb 512+, timeout_ms 120000).
 
 ## Environments and logs
@@ -239,4 +244,31 @@ Prefer this order for integration-heavy work:
 5. Publish the exact validated version_number.
 
 For **agent/LLM workflows**, read velane://runtime/agent-frameworks (or get_agent_framework_docs) first, then use Mastra (bun) or LangGraph (python).
+`
+
+const eventTriggerDocs = `# Nango sync event triggers
+
+Triggers are configured separately from workflow code. Velane receives signed Nango model-change notifications, fetches incremental records, and invokes a published workflow in bounded batches. Create triggers disabled, test a representative envelope in dev, publish the exact tested version, then explicitly enable.
+
+The input envelope contains id, source=nango, provider, connection {id, alias}, event {type=sync.records.changed, model, modified_after}, changes.records, and batch {index,count,is_last}. Each record is {action: added|updated|deleted, data}. Deleted and partial records may contain only identifiers.
+
+Bun:
+` + "```ts" + `
+import { integration } from '@velane/integrations'
+export default async function handler(input: any) {
+  const api = integration(input.provider, { alias: input.connection.alias })
+  for (const change of input.changes.records) { /* idempotently apply change */ }
+  return { receipt: input.id, batch: input.batch.index }
+}
+` + "```" + `
+
+Python:
+` + "```python" + `
+from velane.integrations import integration
+def handler(input: dict) -> dict:
+    api = integration(input["provider"], {"alias": input["connection"]["alias"]})
+    return {"receipt": input["id"], "batch": input["batch"]["index"]}
+` + "```" + `
+
+Delivery is at least once. Use receipt id plus batch index as an idempotency key. Preserve record order, handle retries, deletion tombstones, partial payloads, and every batch independently.
 `

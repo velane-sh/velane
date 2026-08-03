@@ -10,6 +10,8 @@ import type {
   Snippet,
   SnippetEnvironment,
   SnippetVersion,
+  Connection,
+  WorkflowTrigger,
 } from '../types'
 
 const TIMEOUT_PRESETS = [
@@ -37,6 +39,11 @@ export default function WorkflowSettingsPage() {
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [connections, setConnections] = useState<Connection[]>([])
+  const [triggers, setTriggers] = useState<WorkflowTrigger[]>([])
+  const [syncModels, setSyncModels] = useState<string[]>([])
+  const [manualModel, setManualModel] = useState(false)
+  const [triggerForm, setTriggerForm] = useState<{ connection_id: string; model: string; environment: 'dev' | 'staging' | 'prod'; change_types: Array<'added' | 'updated' | 'deleted'> }>({ connection_id: '', model: '', environment: 'dev', change_types: ['added', 'updated', 'deleted'] })
   const { toast, showToast, dismissToast } = useToast()
 
   useDocumentTitle(
@@ -48,16 +55,28 @@ export default function WorkflowSettingsPage() {
     if (!id) return
     async function load() {
       try {
-        const [sn, vs, envs, caps] = await Promise.all([
+        const [sn, vs, envs, caps, conns, triggerRows] = await Promise.all([
           api.getSnippet(id!),
           api.listVersions(id!),
           api.listEnvironments(id!),
           api.getRuntimeLimits(),
+          api.listConnections(),
+          api.listWorkflowTriggers(id!),
         ])
         setSnippet(sn)
         setVersions(vs)
         setEnvironments(envs ?? [])
         setTenantCaps(caps)
+        setConnections(conns)
+        setTriggers(triggerRows)
+        if (conns[0]) {
+          setTriggerForm((f) => ({ ...f, connection_id: conns[0].id }))
+          try {
+            const discovered = await api.listIntegrationEventModels(conns[0].id)
+            setSyncModels(discovered.models)
+            setManualModel(discovered.manual_entry)
+          } catch { setManualModel(true) }
+        }
         if (vs.length > 0) {
           const latest = vs[vs.length - 1]
           setSettings({
@@ -91,12 +110,39 @@ export default function WorkflowSettingsPage() {
     }
   }
 
+  async function selectTriggerConnection(connectionId: string) {
+    setTriggerForm((f) => ({ ...f, connection_id: connectionId, model: '' }))
+    if (!connectionId) { setSyncModels([]); return }
+    try { const result = await api.listIntegrationEventModels(connectionId); setSyncModels(result.models); setManualModel(result.manual_entry) }
+    catch { setSyncModels([]); setManualModel(true) }
+  }
+
+  async function createTrigger() {
+    if (!id || !triggerForm.connection_id || !triggerForm.model.trim()) return
+    try {
+      const created = await api.createWorkflowTrigger(id, { ...triggerForm, model: triggerForm.model.trim() })
+      setTriggers((rows) => [...rows, created])
+      showToast('Trigger created disabled')
+    } catch (err) { showToast(String(err), 'error') }
+  }
+
+  async function toggleTrigger(trigger: WorkflowTrigger) {
+    if (!id) return
+    try {
+      const updated = await api.updateWorkflowTrigger(id, { ...trigger, enabled: !trigger.enabled })
+      setTriggers((rows) => rows.map((row) => row.id === updated.id ? updated : row))
+    } catch (err) { showToast(String(err), 'error') }
+  }
+
+  async function deleteTrigger(triggerId: string) {
+    if (!id) return
+    try { await api.deleteWorkflowTrigger(id, triggerId); setTriggers((rows) => rows.filter((row) => row.id !== triggerId)) }
+    catch (err) { showToast(String(err), 'error') }
+  }
+
   if (loading) {
     return (
-      <div className="flex h-full flex-col">
-        <WorkflowHeader snippet={snippet} />
-        <div className="flex flex-1 items-center justify-center text-gray-500">Loading settings…</div>
-      </div>
+      <div className="flex h-full items-center justify-center text-gray-500">Loading…</div>
     )
   }
 
@@ -238,6 +284,28 @@ export default function WorkflowSettingsPage() {
               </ul>
             </section>
           )}
+
+          <section>
+            <h2 className="text-lg font-semibold text-gray-900">Triggers</h2>
+            <p className="mt-1 text-sm text-gray-500">Run this workflow from incremental Nango sync changes. New triggers stay disabled until explicitly enabled.</p>
+            <div className="mt-4 grid gap-3 rounded-lg border border-gray-200 p-4 sm:grid-cols-2">
+              <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={triggerForm.connection_id} onChange={(e) => selectTriggerConnection(e.target.value)}>
+                <option value="">Select connection</option>
+                {connections.map((c) => <option key={c.id} value={c.id}>{c.provider} · {c.alias}</option>)}
+              </select>
+              {syncModels.length > 0 ? <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={triggerForm.model} onChange={(e) => setTriggerForm((f) => ({ ...f, model: e.target.value }))}><option value="">Select sync model</option>{syncModels.map((model) => <option key={model}>{model}</option>)}</select> : <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder={manualModel ? 'Sync model name (manual)' : 'Select a connection first'} disabled={!triggerForm.connection_id} value={triggerForm.model} onChange={(e) => setTriggerForm((f) => ({ ...f, model: e.target.value }))} />}
+              <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={triggerForm.environment} onChange={(e) => setTriggerForm((f) => ({ ...f, environment: e.target.value as 'dev' | 'staging' | 'prod' }))}>
+                {['dev', 'staging', 'prod'].map((env) => <option key={env}>{env}</option>)}
+              </select>
+              <div className="flex items-center gap-3 text-sm text-gray-700">
+                {(['added', 'updated', 'deleted'] as const).map((change) => <label key={change} className="flex items-center gap-1"><input type="checkbox" checked={triggerForm.change_types.includes(change)} onChange={(e) => setTriggerForm((f) => ({ ...f, change_types: e.target.checked ? [...f.change_types, change] : f.change_types.filter((v) => v !== change) }))} />{change}</label>)}
+              </div>
+              <button type="button" className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50" disabled={!triggerForm.connection_id || !triggerForm.model || triggerForm.change_types.length === 0} onClick={createTrigger}>Create trigger</button>
+            </div>
+            <ul className="mt-4 space-y-3">
+              {triggers.map((trigger) => <li key={trigger.id} className="rounded-lg border border-gray-200 p-4 text-sm"><div className="flex items-center justify-between"><div><p className="font-medium text-gray-900">{trigger.model} → {trigger.environment}</p><p className="text-gray-500">{trigger.change_types.join(', ')}</p></div><div className="flex gap-2"><button type="button" className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => toggleTrigger(trigger)}>{trigger.enabled ? 'Disable' : 'Enable'}</button><button type="button" className="rounded-lg border border-gray-300 px-3 py-1.5 text-red-700 hover:bg-gray-50" onClick={() => deleteTrigger(trigger.id)}>Delete</button></div></div>{trigger.last_delivery_at && <p className="mt-2 text-gray-500">Last delivery: {new Date(trigger.last_delivery_at).toLocaleString()}</p>}{trigger.last_error && <p className="mt-2 text-red-700">{trigger.last_error}</p>}</li>)}
+            </ul>
+          </section>
         </div>
       </div>
     </div>

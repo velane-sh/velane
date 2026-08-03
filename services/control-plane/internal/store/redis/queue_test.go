@@ -133,3 +133,21 @@ func TestQueue_EnqueueMultiple(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegrationEventQueue_EnqueueDequeue(t *testing.T) {
+	client := newTestClient(t)
+	ctx := context.Background()
+	want := redisstore.IntegrationEventJob{ReceiptID: "receipt-1", Attempt: 2}
+	if err := client.EnqueueIntegrationEvent(ctx, want); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	dequeueCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	got, err := client.DequeueIntegrationEvent(dequeueCtx)
+	if err != nil {
+		t.Fatalf("dequeue: %v", err)
+	}
+	if got == nil || got.ReceiptID != want.ReceiptID || got.Attempt != want.Attempt {
+		t.Fatalf("job=%+v, want %+v", got, want)
+	}
+}
