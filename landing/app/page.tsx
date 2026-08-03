@@ -1087,6 +1087,12 @@ export default function Home() {
           </div>
           <div className="flex gap-6">
             <Link
+              href="/contact"
+              className="text-sm text-zinc-500 transition-colors hover:text-zinc-900"
+            >
+              Contact us
+            </Link>
+            <Link
               href="/privacy"
               className="text-sm text-zinc-500 transition-colors hover:text-zinc-900"
             >
