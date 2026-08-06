@@ -141,7 +141,7 @@ func (h *OAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess, err := h.jwt.IssueSession(r.Context(), user)
+	sess, err := h.jwt.IssueOAuthSession(r.Context(), user)
 	if err != nil {
 		h.log.Error("oauth issue session failed", zap.String("provider", providerName), zap.Error(err))
 		h.redirectError(w, r, "session_error")

@@ -5,6 +5,21 @@ export interface User {
   updated_at: string
 }
 
+export interface SSOConnection {
+  id: string
+  protocol: 'oidc' | 'saml'
+  display_name: string
+  default_role: 'invoke' | 'manage'
+  enabled: boolean
+  enforced: boolean
+  tested_at?: string
+  break_glass_user_id?: string
+  oidc_callback_url: string
+  saml_metadata_url: string
+  saml_acs_url: string
+  config: { issuer_url?: string; client_id?: string; client_secret?: string; scopes?: string[]; idp_metadata_xml?: string }
+}
+
 export interface Session {
   session_token: string
   expires_at: string

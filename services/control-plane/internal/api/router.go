@@ -70,6 +70,8 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	auditH := handlers.NewAuditHandler(store, log)
 	instanceH := handlers.NewInstanceHandler(licMgr, log)
 	billingH := handlers.NewBillingHandler(store, licMgr, log)
+	jwtProvider, _ := authProvider.(*auth.JWTProvider)
+	ssoH := handlers.NewSSOHandler(store, jwtProvider, licMgr, encKey, oauthCfg.PublicBaseURL, log, auditor)
 
 	// Health check — no auth.
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +101,9 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	r.Post("/v1/admin/auth/login", adminAuthH.Login)
 	r.Post("/v1/admin/auth/logout", adminAuthH.Logout)
 	r.Post("/v1/admin/auth/refresh", adminAuthH.RefreshToken)
+	r.Get("/v1/admin/auth/sso/discover", ssoH.Discover)
+	r.Get("/v1/admin/auth/sso/{slug}/start", ssoH.Start)
+	r.Get("/v1/admin/auth/sso/{slug}/oidc/callback", ssoH.OIDCCallback)
 
 	// Social login (Google / GitHub) — public, session-based. Only wired when at
 	// least one provider is configured and JWT auth is in use.
@@ -119,6 +124,7 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.SessionAuth(authProvider, store, log))
+		r.Use(middleware.EnforceSSO(store, licMgr, auditor, log))
 		r.Get("/v1/admin/auth/me", adminAuthH.Me)
 		r.Get("/v1/admin/auth/orgs", adminAuthH.ListMyTenants)
 		r.Post("/v1/admin/auth/orgs", adminAuthH.CreateMyTenant)
@@ -145,6 +151,7 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 		r.Use(middleware.SessionAuth(authProvider, store, log))
 		authMw := middleware.Auth(store, log)
 		r.Use(authMw)
+		r.Use(middleware.EnforceSSO(store, licMgr, auditor, log))
 
 		// API key management.
 		r.With(middleware.RequireScope("admin", log)).
@@ -178,6 +185,13 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 
 		// Plan / billing (cloud mode only — returns free plan when VELANE_CLOUD is not set).
 		r.Get("/v1/tenant/plan", billingH.GetPlan)
+
+		r.With(middleware.RequireScope("admin", log)).Get("/v1/tenant/sso", ssoH.Get)
+		r.With(middleware.RequireScope("admin", log)).Put("/v1/tenant/sso", ssoH.Put)
+		r.With(middleware.RequireScope("admin", log)).Delete("/v1/tenant/sso", ssoH.Delete)
+		r.With(middleware.RequireScope("admin", log)).Post("/v1/tenant/sso/test", ssoH.Test)
+		r.With(middleware.RequireScope("admin", log)).Post("/v1/tenant/sso/activate", ssoH.Activate)
+		r.With(middleware.RequireScope("admin", log)).Post("/v1/tenant/sso/enforcement", ssoH.Enforce)
 
 		// Usage aggregation.
 		r.With(middleware.RequireScope("admin", log)).

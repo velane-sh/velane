@@ -124,6 +124,20 @@ variable "jwt_private_key_pem" {
   sensitive   = true
 }
 
+variable "sso_saml_private_key_pem" {
+  description = "PEM private key used to sign SAML SP requests and metadata. Rotate together with the certificate after updating each IdP."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "sso_saml_certificate_pem" {
+  description = "PEM certificate matching sso_saml_private_key_pem."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "worker_count" {
   description = "Async worker concurrency for control-plane."
   type        = number

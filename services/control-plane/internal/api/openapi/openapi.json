@@ -60,6 +60,17 @@
     "/v1/admin/auth/refresh": {
       "post": { "operationId": "refreshSession", "summary": "Rotate a refresh token", "tags": ["Authentication"], "security": [], "requestBody": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RefreshRequest" } } } }, "responses": { "200": { "description": "Rotated token pair", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenPair" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "501": { "$ref": "#/components/responses/Error" } } }
     },
+    "/v1/admin/auth/sso/discover": {
+      "get": { "operationId": "discoverEnterpriseSSO", "summary": "Discover tenant SSO by organization slug", "tags": ["Authentication"], "security": [], "parameters": [{ "name": "org", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "SSO discovery result" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/admin/auth/sso/{slug}/start": {
+      "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "operationId": "startEnterpriseSSO", "summary": "Start tenant SSO", "tags": ["Authentication"], "security": [], "responses": { "302": { "$ref": "#/components/responses/Redirect" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/admin/auth/sso/{slug}/oidc/callback": {
+      "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "operationId": "completeEnterpriseOIDC", "summary": "Complete OIDC SSO", "tags": ["Authentication"], "security": [], "responses": { "302": { "$ref": "#/components/responses/Redirect" } } }
+    },
     "/v1/admin/auth/oauth/providers": {
       "get": { "operationId": "listOAuthProviders", "summary": "List enabled social login providers", "description": "Present only when at least one OAuth provider is configured.", "tags": ["Authentication"], "security": [], "responses": { "200": { "description": "Provider names", "content": { "application/json": { "schema": { "type": "object", "required": ["providers"], "properties": { "providers": { "type": "array", "items": { "type": "string" } } } } } } } } }
     },
@@ -129,6 +140,20 @@
     },
     "/v1/tenant/plan": {
       "get": { "operationId": "getTenantPlan", "summary": "Get tenant plan and entitlements", "tags": ["Tenants"], "responses": { "200": { "description": "Tenant plan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TenantPlan" } } } } } }
+    },
+    "/v1/tenant/sso": {
+      "get": { "operationId": "getTenantSSO", "summary": "Get redacted tenant SSO configuration", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "200": { "description": "SSO configuration" }, "204": { "$ref": "#/components/responses/NoContent" } } },
+      "put": { "operationId": "putTenantSSO", "summary": "Create or update a draft SSO configuration", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "200": { "description": "Redacted SSO configuration" }, "402": { "$ref": "#/components/responses/Error" } } },
+      "delete": { "operationId": "deleteTenantSSO", "summary": "Delete tenant SSO configuration", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "204": { "$ref": "#/components/responses/NoContent" } } }
+    },
+    "/v1/tenant/sso/test": {
+      "post": { "operationId": "testTenantSSO", "summary": "Test the tenant SSO draft", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "200": { "description": "Test succeeded" }, "400": { "$ref": "#/components/responses/BadRequest" } } }
+    },
+    "/v1/tenant/sso/activate": {
+      "post": { "operationId": "activateTenantSSO", "summary": "Activate a tested SSO connection", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "200": { "description": "Connection activated" }, "409": { "$ref": "#/components/responses/Error" } } }
+    },
+    "/v1/tenant/sso/enforcement": {
+      "post": { "operationId": "setTenantSSOEnforcement", "summary": "Set SSO enforcement and break-glass administrator", "tags": ["Tenants"], "x-required-scope": "admin", "responses": { "200": { "description": "Enforcement updated" }, "400": { "$ref": "#/components/responses/BadRequest" } } }
     },
     "/v1/tenant/usage": {
       "get": { "operationId": "getTenantUsage", "summary": "Get tenant usage aggregation", "tags": ["Observability"], "x-required-scope": "admin", "parameters": [{ "name": "window", "in": "query", "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" } }], "responses": { "200": { "description": "Usage summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UsageSummary" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }

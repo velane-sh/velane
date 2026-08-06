@@ -38,8 +38,10 @@ type Config struct {
 	InvocationRetention                time.Duration
 
 	// JWT auth (Phase 9)
-	JWTPrivateKeyPEM string // RS256 private key PEM (env: JWT_PRIVATE_KEY); if empty, generate ephemeral key with warning
-	JWTPublicKeyPEM  string // derived from private key, not loaded from env
+	JWTPrivateKeyPEM      string // RS256 private key PEM (env: JWT_PRIVATE_KEY); if empty, generate ephemeral key with warning
+	JWTPublicKeyPEM       string // derived from private key, not loaded from env
+	SSOSAMLPrivateKeyPEM  string // stable SAML SP signing key
+	SSOSAMLCertificatePEM string // matching public certificate
 
 	// Social login (Phase 9) — OAuth user sign-in for the admin portal.
 	PublicBaseURL           string // PUBLIC_BASE_URL: browser-facing admin portal origin (default http://localhost:8092). API is reached at PublicBaseURL + "/api".
@@ -117,6 +119,8 @@ func Load() Config {
 		BootstrapPassword:                  os.Getenv("BOOTSTRAP_PASSWORD"),
 		BootstrapTenant:                    getEnv("BOOTSTRAP_TENANT", "default"),
 		JWTPrivateKeyPEM:                   os.Getenv("JWT_PRIVATE_KEY"),
+		SSOSAMLPrivateKeyPEM:               os.Getenv("SSO_SAML_PRIVATE_KEY"),
+		SSOSAMLCertificatePEM:              os.Getenv("SSO_SAML_CERTIFICATE"),
 		NangoInternalURL:                   getEnv("NANGO_INTERNAL_URL", "http://nango:3003"),
 		NangoPublicURL:                     getEnv("NANGO_PUBLIC_URL", "http://localhost:3003"),
 		NangoConnectURL:                    getEnv("NANGO_CONNECT_URL", "http://localhost:3009"),

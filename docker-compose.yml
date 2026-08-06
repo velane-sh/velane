@@ -182,6 +182,10 @@ services:
         /U1Kgmig2lat12we4ljQAkiHg+WSW7PlE2F39qH7GKXNaUScOhqR1+32PL0rcGJh
         j23LJh+RwYiYDBjNA0rIAgE=
         -----END PRIVATE KEY-----
+      # SAML SP signing material must be stable in production. Empty values use
+      # a development-only ephemeral pair and invalidate outstanding requests on restart.
+      SSO_SAML_PRIVATE_KEY: ${SSO_SAML_PRIVATE_KEY:-}
+      SSO_SAML_CERTIFICATE: ${SSO_SAML_CERTIFICATE:-}
       # First-boot only: creates an admin user + tenant on startup, then remove these.
       BOOTSTRAP_EMAIL: admin@example.com
       BOOTSTRAP_PASSWORD: changeme123

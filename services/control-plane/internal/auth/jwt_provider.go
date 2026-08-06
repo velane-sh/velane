@@ -17,7 +17,10 @@ import (
 
 // velaneClaims are the JWT claims embedded in access tokens.
 type velaneClaims struct {
-	Email string `json:"email"`
+	Email           string `json:"email"`
+	AuthMethod      string `json:"auth_method,omitempty"`
+	SSOTenantID     string `json:"sso_tenant_id,omitempty"`
+	SSOConnectionID string `json:"sso_connection_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -27,6 +30,10 @@ type JWTStore interface {
 	CreateRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (*models.RefreshToken, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
+}
+
+type assuranceJWTStore interface {
+	CreateRefreshTokenWithAssurance(ctx context.Context, userID, tokenHash string, expiresAt time.Time, assurance models.SessionAssurance) (*models.RefreshToken, error)
 }
 
 // AuthTokenPair is the response returned for login and token refresh.
@@ -106,6 +113,24 @@ func (p *JWTProvider) IssueSession(ctx context.Context, user *models.User) (*mod
 	}, nil
 }
 
+// IssueOAuthSession marks social-login assurance separately from password login.
+func (p *JWTProvider) IssueOAuthSession(ctx context.Context, user *models.User) (*models.Session, error) {
+	pair, err := p.issueTokenPairWithAssurance(ctx, user, models.SessionAssurance{AuthMethod: "oauth"})
+	if err != nil {
+		return nil, err
+	}
+	return &models.Session{UserID: user.ID, Token: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresAt: pair.ExpiresAt, RefreshExpires: time.Now().Add(7 * 24 * time.Hour)}, nil
+}
+
+// IssueSSOSession binds a session to exactly one tenant and SSO connection.
+func (p *JWTProvider) IssueSSOSession(ctx context.Context, user *models.User, tenantID, connectionID string) (*models.Session, error) {
+	pair, err := p.issueTokenPairWithAssurance(ctx, user, models.SessionAssurance{AuthMethod: "sso", SSOTenantID: tenantID, SSOConnectionID: connectionID})
+	if err != nil {
+		return nil, err
+	}
+	return &models.Session{UserID: user.ID, Token: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresAt: pair.ExpiresAt, RefreshExpires: time.Now().Add(7 * 24 * time.Hour)}, nil
+}
+
 // RevokeRefreshToken revokes a raw refresh token value.
 func (p *JWTProvider) RevokeRefreshToken(ctx context.Context, rawRefreshToken string) error {
 	if strings.TrimSpace(rawRefreshToken) == "" {
@@ -176,14 +201,19 @@ func (p *JWTProvider) Refresh(ctx context.Context, rawRefreshToken string) (*Aut
 		return nil, fmt.Errorf("failed to revoke old refresh token: %w", err)
 	}
 
-	return p.issueTokenPair(ctx, user)
+	return p.issueTokenPairWithAssurance(ctx, user, models.SessionAssurance{AuthMethod: rt.AuthMethod, SSOTenantID: rt.SSOTenantID, SSOConnectionID: rt.SSOConnectionID})
 }
 
 // IssueAccessToken creates a signed RS256 JWT with claims: sub=userID, email, iss, iat, exp.
 func (p *JWTProvider) IssueAccessToken(user *models.User) (string, time.Time, error) {
+	return p.issueAccessTokenWithAssurance(user, models.SessionAssurance{AuthMethod: "local"})
+}
+
+func (p *JWTProvider) issueAccessTokenWithAssurance(user *models.User, assurance models.SessionAssurance) (string, time.Time, error) {
 	expiresAt := time.Now().Add(15 * time.Minute)
 	claims := velaneClaims{
-		Email: user.Email,
+		Email:      user.Email,
+		AuthMethod: assurance.AuthMethod, SSOTenantID: assurance.SSOTenantID, SSOConnectionID: assurance.SSOConnectionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
 			Issuer:    p.issuer,
@@ -201,7 +231,14 @@ func (p *JWTProvider) IssueAccessToken(user *models.User) (string, time.Time, er
 
 // issueTokenPair creates a new access + refresh token pair and persists the refresh token.
 func (p *JWTProvider) issueTokenPair(ctx context.Context, user *models.User) (*AuthTokenPair, error) {
-	accessToken, expiresAt, err := p.IssueAccessToken(user)
+	return p.issueTokenPairWithAssurance(ctx, user, models.SessionAssurance{AuthMethod: "local"})
+}
+
+func (p *JWTProvider) issueTokenPairWithAssurance(ctx context.Context, user *models.User, assurance models.SessionAssurance) (*AuthTokenPair, error) {
+	if assurance.AuthMethod == "" {
+		assurance.AuthMethod = "local"
+	}
+	accessToken, expiresAt, err := p.issueAccessTokenWithAssurance(user, assurance)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +246,12 @@ func (p *JWTProvider) issueTokenPair(ctx context.Context, user *models.User) (*A
 	rawRefresh, refreshHash := generateRefreshToken()
 	refreshExpiry := time.Now().Add(7 * 24 * time.Hour)
 
-	rt, err := p.store.CreateRefreshToken(ctx, user.ID, refreshHash, refreshExpiry)
+	var rt *models.RefreshToken
+	if extended, ok := p.store.(assuranceJWTStore); ok {
+		rt, err = extended.CreateRefreshTokenWithAssurance(ctx, user.ID, refreshHash, refreshExpiry, assurance)
+	} else {
+		rt, err = p.store.CreateRefreshToken(ctx, user.ID, refreshHash, refreshExpiry)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("store refresh token: %w", err)
 	}
@@ -221,6 +263,26 @@ func (p *JWTProvider) issueTokenPair(ctx context.Context, user *models.User) (*A
 		ExpiresAt:    expiresAt,
 		TokenType:    "Bearer",
 	}, nil
+}
+
+// SessionAssurance validates a Velane JWT and returns its tenant binding. Legacy
+// tokens are treated as local sessions for backwards compatibility.
+func (p *JWTProvider) SessionAssurance(rawToken string) (models.SessionAssurance, error) {
+	claims := &velaneClaims{}
+	token, err := jwt.ParseWithClaims(rawToken, claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return p.pubKey, nil
+	})
+	if err != nil || !token.Valid || claims.Issuer != p.issuer {
+		return models.SessionAssurance{}, fmt.Errorf("invalid token")
+	}
+	method := claims.AuthMethod
+	if method == "" {
+		method = "local"
+	}
+	return models.SessionAssurance{AuthMethod: method, SSOTenantID: claims.SSOTenantID, SSOConnectionID: claims.SSOConnectionID}, nil
 }
 
 // generateRefreshToken creates a cryptographically random refresh token and its SHA-256 hash.

@@ -121,11 +121,16 @@ func (s *Store) DeleteSession(ctx context.Context, tokenHash string) error {
 
 // CreateRefreshToken inserts a new refresh token record and returns it.
 func (s *Store) CreateRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) (*models.RefreshToken, error) {
+	return s.CreateRefreshTokenWithAssurance(ctx, userID, tokenHash, expiresAt, models.SessionAssurance{AuthMethod: "local"})
+}
+
+func (s *Store) CreateRefreshTokenWithAssurance(ctx context.Context, userID, tokenHash string, expiresAt time.Time, assurance models.SessionAssurance) (*models.RefreshToken, error) {
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, user_id, token_hash, expires_at, revoked_at, created_at`,
-		ids.New(), userID, tokenHash, expiresAt,
+		`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, auth_method, sso_tenant_id, sso_connection_id)
+		 VALUES ($1, $2, $3, $4, $5, NULLIF($6,''), NULLIF($7,''))
+		 RETURNING id, user_id, token_hash, expires_at, revoked_at, created_at, auth_method,
+		 COALESCE(sso_tenant_id,''), COALESCE(sso_connection_id,'')`,
+		ids.New(), userID, tokenHash, expiresAt, assurance.AuthMethod, assurance.SSOTenantID, assurance.SSOConnectionID,
 	)
 	return scanRefreshToken(row)
 }
@@ -134,7 +139,8 @@ func (s *Store) CreateRefreshToken(ctx context.Context, userID, tokenHash string
 // Returns an error if the token does not exist, is revoked, or has expired.
 func (s *Store) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT id, user_id, token_hash, expires_at, revoked_at, created_at
+		`SELECT id, user_id, token_hash, expires_at, revoked_at, created_at, auth_method,
+		 COALESCE(sso_tenant_id,''), COALESCE(sso_connection_id,'')
 		 FROM refresh_tokens
 		 WHERE token_hash = $1`,
 		tokenHash,
@@ -163,7 +169,8 @@ func (s *Store) RevokeRefreshToken(ctx context.Context, tokenHash string) error 
 
 func scanRefreshToken(s scannable) (*models.RefreshToken, error) {
 	var rt models.RefreshToken
-	if err := s.Scan(&rt.ID, &rt.UserID, &rt.TokenHash, &rt.ExpiresAt, &rt.RevokedAt, &rt.CreatedAt); err != nil {
+	if err := s.Scan(&rt.ID, &rt.UserID, &rt.TokenHash, &rt.ExpiresAt, &rt.RevokedAt, &rt.CreatedAt,
+		&rt.AuthMethod, &rt.SSOTenantID, &rt.SSOConnectionID); err != nil {
 		return nil, err
 	}
 	return &rt, nil

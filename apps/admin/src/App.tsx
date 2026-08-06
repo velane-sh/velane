@@ -20,6 +20,7 @@ import IntegrationsPage from './pages/IntegrationsPage'
 import MCPPage from './pages/MCPPage'
 import BillingPage from './pages/BillingPage'
 import ProtectedRoute from './components/ProtectedRoute'
+import SSOSettingsPage from './enterprise/SSOSettingsPage'
 
 function RootRedirect() {
   const [params] = useSearchParams()
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="branding" element={<BrandingPage />} />
             <Route path="egress" element={<EgressPage />} />
             <Route path="embed" element={<EmbedPage />} />
+            <Route path="sso" element={<SSOSettingsPage />} />
           </Route>
         </Route>
       </Routes>

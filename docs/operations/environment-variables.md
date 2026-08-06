@@ -25,6 +25,8 @@ This page highlights the most important configuration values for running Velane.
 
 - `ENCRYPTION_KEY`: key used for secret encryption
 - `JWT_PRIVATE_KEY`: signing key for session JWTs
+- `SSO_SAML_PRIVATE_KEY`: stable PEM private key used to sign SAML SP requests and metadata
+- `SSO_SAML_CERTIFICATE`: PEM certificate matching the SAML private key. Publish the new certificate to IdPs before rotating both values, then re-test connections.
 
 In production, these must be stable and persistent across restarts.
 

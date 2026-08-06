@@ -7,6 +7,7 @@ const tabs = [
   { to: '/dashboard/settings/branding', label: 'Branding' },
   { to: '/dashboard/settings/egress', label: 'Egress Policy' },
   { to: '/dashboard/settings/embed', label: 'Embed' },
+  { to: '/dashboard/settings/sso', label: 'Enterprise SSO' },
 ]
 
 export default function SettingsLayout() {

@@ -23,6 +23,7 @@ import type {
   NangoProvider,
   IntegrationConfig,
   MCPInfo,
+  SSOConnection,
 } from '../types'
 
 const BASE = '/api'
@@ -451,6 +452,18 @@ export const api = {
   // Billing
   async getTenantPlan(): Promise<{ plan: string; valid: boolean; features: string[] }> {
     return request('GET', '/v1/tenant/plan', undefined, 'session')
+  },
+
+  async discoverSSO(org: string): Promise<{ available: boolean; protocol: string; display_name: string; start_url: string }> {
+    return request('GET', `/v1/admin/auth/sso/discover?org=${encodeURIComponent(org)}`, undefined, 'none')
+  },
+  async getSSO(): Promise<SSOConnection | undefined> { return request('GET', '/v1/tenant/sso') },
+  async saveSSO(value: Partial<SSOConnection>): Promise<SSOConnection> { return request('PUT', '/v1/tenant/sso', value) },
+  async deleteSSO(): Promise<void> { return request('DELETE', '/v1/tenant/sso') },
+  async testSSO(): Promise<SSOConnection> { return request('POST', '/v1/tenant/sso/test') },
+  async activateSSO(): Promise<SSOConnection> { return request('POST', '/v1/tenant/sso/activate') },
+  async setSSOEnforcement(enforced: boolean, breakGlassUserId: string): Promise<SSOConnection> {
+    return request('POST', '/v1/tenant/sso/enforcement', { enforced, break_glass_user_id: breakGlassUserId })
   },
 
   // Invocation
