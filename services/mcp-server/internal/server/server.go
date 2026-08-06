@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -107,7 +109,7 @@ func (s *Server) handleToolsCall(ctx context.Context, authHeader string, req pro
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
 	}
-	if err := json.Unmarshal(req.Params, &params); err != nil {
+	if err := decodeJSON(req.Params, &params); err != nil {
 		return protocol.Error(req.ID, -32602, "invalid tools/call params", err.Error())
 	}
 	if params.Name == "" {
@@ -154,7 +156,7 @@ func formatToolResult(toolName string, result any) (map[string]any, string) {
 
 	if len(b) > 0 && b[0] == '[' {
 		var items []any
-		if err := json.Unmarshal(b, &items); err == nil {
+		if err := decodeJSON(b, &items); err == nil {
 			key := listResultKey(toolName)
 			structured := map[string]any{key: items}
 			return structured, fmt.Sprintf("%s completed successfully\n%s", toolName, string(b))
@@ -162,7 +164,7 @@ func formatToolResult(toolName string, result any) (map[string]any, string) {
 	}
 
 	var obj map[string]any
-	if err := json.Unmarshal(b, &obj); err == nil && obj != nil {
+	if err := decodeJSON(b, &obj); err == nil && obj != nil {
 		text := fmt.Sprintf("%s completed successfully\n%s", toolName, string(b))
 		if toolName == "get_integration_docs" {
 			text = formatIntegrationDocsText(obj)
@@ -279,7 +281,7 @@ func (s *Server) handleResourcesRead(ctx context.Context, authHeader string, req
 	var params struct {
 		URI string `json:"uri"`
 	}
-	if err := json.Unmarshal(req.Params, &params); err != nil {
+	if err := decodeJSON(req.Params, &params); err != nil {
 		return protocol.Error(req.ID, -32602, "invalid resources/read params", err.Error())
 	}
 	if strings.TrimSpace(params.URI) == "" {
@@ -298,7 +300,7 @@ func (s *Server) handlePromptsGet(req protocol.Request) protocol.Response {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
 	}
-	if err := json.Unmarshal(req.Params, &params); err != nil {
+	if err := decodeJSON(req.Params, &params); err != nil {
 		return protocol.Error(req.ID, -32602, "invalid prompts/get params", err.Error())
 	}
 	if strings.TrimSpace(params.Name) == "" {
@@ -320,7 +322,9 @@ func (s *Server) handlePromptsGet(req protocol.Request) protocol.Response {
 
 func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 	var req protocol.Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, protocol.Error(nil, -32700, "parse error", err.Error()))
 		return
 	}
@@ -363,6 +367,21 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func decodeJSON(data []byte, out any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("invalid trailing data")
+		}
+		return err
+	}
+	return nil
 }
 
 func isNotification(req protocol.Request) bool {

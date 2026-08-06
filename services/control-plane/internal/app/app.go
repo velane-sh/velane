@@ -140,6 +140,8 @@ func Bootstrap(ctx context.Context, log *zap.Logger) (*App, error) {
 	sched.WithInternalProxyURL(cfg.InternalProxyURL)
 	sched.SetObserver(observer)
 
+	go runKVReaper(ctx, store, log)
+
 	if redisClient != nil {
 		w := worker.New(redisClient, store, exec, log, cfg.WorkerCount)
 		w.SetObserver(observer)
@@ -215,6 +217,26 @@ func runStaleInvocationReaper(ctx context.Context, store *postgres.Store, log *z
 			}
 			if n > 0 {
 				log.Info("reaper: marked stale invocations as timed out", zap.Int64("count", n))
+			}
+		}
+	}
+}
+
+func runKVReaper(ctx context.Context, store *postgres.Store, log *zap.Logger) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := store.DeleteExpiredKV(ctx, postgres.KVReaperBatchSize, 20)
+			if err != nil {
+				log.Warn("reaper: delete expired KV entries", zap.Error(err))
+				continue
+			}
+			if n > 0 {
+				log.Info("reaper: deleted expired KV entries", zap.Int64("count", n))
 			}
 		}
 	}

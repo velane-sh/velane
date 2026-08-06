@@ -707,3 +707,92 @@ func TestScheduler_Invoke_SecretsInjected(t *testing.T) {
 		t.Errorf("MY_SECRET = %q; want %q", capturedSpec.SecretEnvVars["MY_SECRET"], "top-secret-value")
 	}
 }
+
+func TestInjectProxyEnv_AllInvocationPaths(t *testing.T) {
+	const (
+		versionID = "ver-1"
+		tenantID  = "tenant-1"
+		proxyURL  = "http://control-plane:8080"
+	)
+	activeVersion := versionID
+	req := scheduler.InvokeRequest{
+		TenantID:    tenantID,
+		SnippetSlug: "hello",
+		Env:         "prod",
+		Input:       `{}`,
+	}
+
+	newStore := func(invocationID string) *mockStore {
+		store := buildDefaultStore(invocationID, versionID, &activeVersion)
+		store.getSecretsForInvocation = func(ctx context.Context, tenantID, snippetID, env string, encKey []byte) (map[string]string, error) {
+			return map[string]string{"MY_SECRET": "top-secret-value"}, nil
+		}
+		return store
+	}
+	assertEnv := func(t *testing.T, env map[string]string) {
+		t.Helper()
+		if env["MY_SECRET"] != "top-secret-value" {
+			t.Errorf("MY_SECRET = %q; want %q", env["MY_SECRET"], "top-secret-value")
+		}
+		if env["VELANE_PROXY_URL"] != proxyURL {
+			t.Errorf("VELANE_PROXY_URL = %q; want %q", env["VELANE_PROXY_URL"], proxyURL)
+		}
+		if env["VELANE_TENANT_ID"] != tenantID {
+			t.Errorf("VELANE_TENANT_ID = %q; want %q", env["VELANE_TENANT_ID"], tenantID)
+		}
+	}
+
+	t.Run("Invoke", func(t *testing.T) {
+		var captured executor.RunSpec
+		exec := &mockExecutor{run: func(ctx context.Context, spec executor.RunSpec) executor.RunResult {
+			captured = spec
+			return executor.RunResult{}
+		}}
+
+		sched := scheduler.New(newStore("inv-sync"), exec, testEncKey, nil).WithInternalProxyURL(proxyURL)
+		if _, err := sched.Invoke(context.Background(), req); err != nil {
+			t.Fatalf("Invoke error: %v", err)
+		}
+		assertEnv(t, captured.SecretEnvVars)
+	})
+
+	t.Run("InvokeAsync", func(t *testing.T) {
+		queue := &mockQueue{}
+		sched := scheduler.NewWithQueue(newStore("inv-async"), &mockExecutor{}, queue, testEncKey, nil).WithInternalProxyURL(proxyURL)
+		if _, err := sched.InvokeAsync(context.Background(), req, ""); err != nil {
+			t.Fatalf("InvokeAsync error: %v", err)
+		}
+		if len(queue.jobs) != 1 {
+			t.Fatalf("queued jobs = %d; want 1", len(queue.jobs))
+		}
+		assertEnv(t, queue.jobs[0].SecretEnvVars)
+	})
+
+	t.Run("InvokeQueued", func(t *testing.T) {
+		queue := &mockQueue{}
+		sched := scheduler.NewWithQueue(newStore("inv-queued"), &mockExecutor{}, queue, testEncKey, nil).WithInternalProxyURL(proxyURL)
+		if _, err := sched.InvokeQueued(context.Background(), req); err != nil {
+			t.Fatalf("InvokeQueued error: %v", err)
+		}
+		if len(queue.jobs) != 1 {
+			t.Fatalf("queued jobs = %d; want 1", len(queue.jobs))
+		}
+		assertEnv(t, queue.jobs[0].SecretEnvVars)
+	})
+
+	t.Run("InvokeStream", func(t *testing.T) {
+		var captured executor.RunSpec
+		exec := &mockExecutor{runStream: func(ctx context.Context, spec executor.RunSpec) (<-chan executor.StreamChunk, error) {
+			captured = spec
+			ch := make(chan executor.StreamChunk)
+			close(ch)
+			return ch, nil
+		}}
+
+		sched := scheduler.New(newStore("inv-stream"), exec, testEncKey, nil).WithInternalProxyURL(proxyURL)
+		if _, _, err := sched.InvokeStream(context.Background(), req); err != nil {
+			t.Fatalf("InvokeStream error: %v", err)
+		}
+		assertEnv(t, captured.SecretEnvVars)
+	})
+}

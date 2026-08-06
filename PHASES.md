@@ -166,7 +166,7 @@ snippet_environments.canary_pct
   - `ping`
   - `tools/list`
   - `tools/call`
-- **10 MCP tools exposed** and wired to control-plane APIs:
+- **14 MCP tools exposed** and wired to control-plane APIs:
 
 | Tool              | Scope needed |
 | ----------------- | ------------ |
@@ -180,6 +180,10 @@ snippet_environments.canary_pct
 | `list_secrets`    | manage       |
 | `set_secret`      | manage       |
 | `get_metrics`     | invoke       |
+| `kv_get`          | invoke       |
+| `kv_set`          | manage       |
+| `kv_delete`       | manage       |
+| `kv_list`         | invoke       |
 
 - **Auth passthrough** — Bearer token forwarded to control-plane for scope/tenant enforcement
 - **Docker Compose integration** — `mcp-server` service added, listening on `:8090`, configured with `CONTROL_PLANE_URL=http://control-plane:8080`
@@ -334,6 +338,36 @@ CREATE TABLE audit_log (id, tenant_id, actor_id, actor_type, action, resource_id
 
 ---
 
+## Phase 10 — Cross-Invocation KV Store (complete)
+
+**Goal:** Persist small JSON state between invocations without putting state in
+snippet code, request payloads, or secrets.
+
+### Delivered
+
+- **Tenant-scoped KV entries** — Postgres-backed `kv_entries` with namespaces,
+  TTL, lazy expiry, background reaping, and per-tenant quotas
+- **Built-in libraries** — `@velane/store` for Bun and `velane.store` for
+  Python; the default namespace is tenant-wide and `namespace()` opts into
+  separate workflow state
+- **Public KV API** — authenticated `/v1/kv/*` routes derive tenant context
+  from the credential and enforce tenant predicates on each query
+- **MCP tools** — `kv_get`, `kv_set`, `kv_delete`, and `kv_list`
+- **Data Store UI** — browse and delete entries, with values structurally
+  omitted from list responses and audited admin-scope reveal
+- **Plaintext warning** — values are not encrypted; redaction is a UX and
+  auditing boundary, not a confidentiality boundary
+
+### Known exposure
+
+`/v1/proxy/*` and `/v1/internal/kv/*` trust a caller-supplied
+`X-Velane-Tenant` header and are reachable from outside in shipped topologies.
+This accepted exposure remains until separate-listener hardening lands. See the
+documentation's Trust-Header Routes page and known limitations before a
+production rollout.
+
+---
+
 ## Summary
 
 | Phase | Theme          | Key deliverable                                                             |
@@ -347,3 +381,4 @@ CREATE TABLE audit_log (id, tenant_id, actor_id, actor_type, action, resource_id
 | 7     | Embedding      | iframe embed dashboard, embed tokens, read-only snippet viewer              |
 | 8     | Tenant Admin   | Admin portal, white-label branding config, team management, usage dashboard |
 | 9     | Hardening      | Firecracker, OpenAPI gen, JWT, seccomp profiles, audit log                  |
+| 10    | KV Store       | Cross-invocation state, KV API, built-in libraries, MCP and admin UI         |

@@ -17,6 +17,7 @@
     { "name": "Snippets" },
     { "name": "Versions" },
     { "name": "Secrets" },
+    { "name": "KV" },
     { "name": "Invocations" },
     { "name": "Observability" },
     { "name": "Embeds" },
@@ -222,6 +223,315 @@
       "post": { "operationId": "setSnippetCanary", "summary": "Configure canary traffic", "tags": ["Versions"], "x-required-scope": "manage", "parameters": [{ "$ref": "#/components/parameters/Environment" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetCanaryRequest" } } } }, "responses": { "200": { "description": "Updated environment", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnippetEnvironment" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } },
       "delete": { "operationId": "clearSnippetCanary", "summary": "Clear canary traffic", "tags": ["Versions"], "x-required-scope": "manage", "parameters": [{ "$ref": "#/components/parameters/Environment" }], "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
+    "/v1/kv/entries": {
+      "get": {
+        "operationId": "listKVEntries",
+        "summary": "List KV entry metadata",
+        "description": "Returns metadata only; values are structurally omitted from every list item.",
+        "tags": [
+          "KV"
+        ],
+        "x-required-scope": "invoke",
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "description": "Optional namespace filter. When omitted, entries from all namespaces are returned; this differs from `namespace=default`, which returns only the default namespace.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(|[a-z0-9][a-z0-9_-]{0,63})$"
+            }
+          },
+          {
+            "name": "prefix",
+            "in": "query",
+            "description": "Literal key prefix filter.",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "KV entry metadata, without values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KVEntryList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/v1/kv/entry": {
+      "get": {
+        "operationId": "getKVEntry",
+        "summary": "Get a KV entry value",
+        "tags": [
+          "KV"
+        ],
+        "x-required-scope": "invoke",
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "description": "Entry namespace. Omit or pass an empty value to use `default`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(|[a-z0-9][a-z0-9_-]{0,63})$"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "description": "Entry key. Keys are query parameters so `/`, `.`, `%`, `#`, and `?` remain transport-safe when encoded.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "KV entry including its plaintext JSON value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KVEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "operationId": "setKVEntry",
+        "summary": "Create or fully replace a KV entry",
+        "description": "Idempotently replaces the entry value and TTL. Omitting `ttl_seconds` (or sending `null`) clears any existing expiry; it does not leave the previous expiry unchanged. The raw request body is capped at `max_value_bytes + 4096` bytes for transport safety, while the authoritative stored-value limit is PostgreSQL's canonical JSONB text size (`octet_length(value::text)`). Either limit can return 413, so an encoding may be rejected even when its canonical JSON value would fit.",
+        "tags": [
+          "KV"
+        ],
+        "x-required-scope": "manage",
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "description": "Entry namespace. Omit or pass an empty value to use `default`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(|[a-z0-9][a-z0-9_-]{0,63})$"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "description": "Entry key. Keys are query parameters so `/`, `.`, `%`, `#`, and `?` remain transport-safe when encoded.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KVSetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created or replaced KV entry including its plaintext JSON value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KVEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "description": "The key-count or total canonical-storage quota would be exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The raw body exceeded `max_value_bytes + 4096` bytes, or the canonical JSONB text value exceeded `max_value_bytes`. These are distinct limits; a raw encoding can exceed the first even if its canonical JSON value fits the second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteKVEntry",
+        "summary": "Delete a KV entry",
+        "tags": [
+          "KV"
+        ],
+        "x-required-scope": "manage",
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "description": "Entry namespace. Omit or pass an empty value to use `default`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(|[a-z0-9][a-z0-9_-]{0,63})$"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "description": "Entry key.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/NoContent"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/kv/namespaces": {
+      "get": {
+        "operationId": "listKVNamespaces",
+        "summary": "List KV namespace summaries",
+        "tags": [
+          "KV"
+        ],
+        "x-required-scope": "invoke",
+        "responses": {
+          "200": {
+            "description": "Live entry counts and canonical storage usage by namespace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KVNamespaceSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/kv/reveal": {
+      "post": {
+        "operationId": "revealKVEntry",
+        "summary": "Reveal a KV entry value",
+        "description": "Returns one plaintext JSON value and records an audit event. Values are stored in plaintext; this admin-only reveal is an auditing and UX boundary, not a confidentiality or encryption boundary.",
+        "tags": [
+          "KV"
+        ],
+        "x-required-scope": "admin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KVRevealRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "KV entry including its plaintext JSON value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KVEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "description": "The reveal request body exceeded the 8 KiB limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/secrets": {
       "get": { "operationId": "listSecrets", "summary": "List secrets and variables", "tags": ["Secrets"], "responses": { "200": { "description": "Secret metadata; variables may include values, credentials never do", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Secret" } } } } } } },
       "post": { "operationId": "createSecret", "summary": "Create a secret", "tags": ["Secrets"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSecretRequest" } } } }, "responses": { "201": { "description": "Secret metadata", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Secret" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
@@ -390,6 +700,183 @@
       "InvocationLogSummary": { "type": "object", "required": ["id", "snippet_id", "version_id", "environment", "tenant_id", "status", "duration_ms", "peak_memory_mb", "cpu_ms", "created_at", "invoke_mode", "payload_state"], "properties": { "id": { "type": "string" }, "snippet_id": { "type": "string" }, "version_id": { "type": "string" }, "environment": { "$ref": "#/components/schemas/Environment" }, "tenant_id": { "type": "string" }, "status": { "$ref": "#/components/schemas/InvocationStatus" }, "duration_ms": { "type": "integer" }, "peak_memory_mb": { "type": "integer" }, "cpu_ms": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "completed_at": { "type": ["string", "null"], "format": "date-time" }, "invoke_mode": { "type": "string", "enum": ["sync", "async", "stream"] }, "payload_state": { "type": "string", "enum": ["legacy", "pending", "stored", "failed", "purged"] } } },
       "LogResult": { "type": "object", "required": ["snippet_id", "items"], "properties": { "snippet_id": { "type": "string" }, "items": { "type": "array", "items": { "$ref": "#/components/schemas/InvocationLogSummary" } }, "filters": { "type": "object", "additionalProperties": true } } },
       "SnippetMetrics": { "type": "object", "additionalProperties": true },
+      "KVEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "namespace",
+          "key",
+          "value",
+          "size_bytes",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "description": "Plaintext JSON value. Present for single-entry reads, writes, and reveals; structurally omitted from list responses."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Canonical PostgreSQL JSONB text size in bytes."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "KVEntryMeta": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "namespace",
+          "key",
+          "size_bytes",
+          "created_at",
+          "updated_at"
+        ],
+        "description": "KV entry metadata. The plaintext `value` property is structurally omitted.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Canonical PostgreSQL JSONB text size in bytes."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "KVEntryList": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "Metadata-only items; values are never included.",
+            "items": {
+              "$ref": "#/components/schemas/KVEntryMeta"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "KVNamespaceSummary": {
+        "type": "object",
+        "required": [
+          "namespace",
+          "keys",
+          "size_bytes"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total canonical PostgreSQL JSONB text size in bytes."
+          }
+        }
+      },
+      "KVSetRequest": {
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "description": "Any valid JSON value, including `null`."
+          },
+          "ttl_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 31536000,
+            "description": "Seconds until expiry. Omit or use `null` to clear any existing expiry."
+          }
+        }
+      },
+      "KVRevealRequest": {
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "pattern": "^(|[a-z0-9][a-z0-9_-]{0,63})$",
+            "description": "Omit or use an empty value to select `default`."
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      },
       "EmbedToken": { "type": "object", "required": ["id", "tenant_id", "expires_at", "created_at"], "properties": { "id": { "type": "string" }, "tenant_id": { "type": "string" }, "allowed_snippet_ids": { "type": "array", "items": { "type": "string" } }, "expires_at": { "type": "string", "format": "date-time" }, "revoked_at": { "type": ["string", "null"], "format": "date-time" }, "created_at": { "type": "string", "format": "date-time" } } },
       "CreateEmbedTokenRequest": { "type": "object", "properties": { "tenant_slug": { "type": "string" }, "snippet_ids": { "type": "array", "items": { "type": "string" } }, "ttl_seconds": { "type": "integer", "minimum": 1, "default": 3600 } } },
       "CreateEmbedTokenResponse": { "type": "object", "required": ["id", "token", "expires_at"], "properties": { "id": { "type": "string" }, "token": { "type": "string", "pattern": "^et_" }, "expires_at": { "type": "string", "format": "date-time" } } },

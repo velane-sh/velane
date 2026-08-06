@@ -146,6 +146,12 @@ func toInt(args map[string]any, key string, required bool) (int, error) {
 		return int(n), nil
 	case int:
 		return n, nil
+	case json.Number:
+		parsed, err := strconv.Atoi(n.String())
+		if err != nil {
+			return 0, fmt.Errorf("argument %s must be an integer", key)
+		}
+		return parsed, nil
 	case string:
 		parsed, err := strconv.Atoi(n)
 		if err != nil {
@@ -199,4 +205,16 @@ func toRawInput(args map[string]any) (json.RawMessage, error) {
 		}
 		return b, nil
 	}
+}
+
+func toRawJSON(args map[string]any, key string) (json.RawMessage, error) {
+	v, ok := args[key]
+	if !ok {
+		return nil, fmt.Errorf("missing required argument: %s", key)
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("marshal argument %s: %w", key, err)
+	}
+	return json.RawMessage(b), nil
 }

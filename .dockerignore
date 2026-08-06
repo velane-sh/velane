@@ -7,3 +7,5 @@ node_modules/
 **/.DS_Store
 
 terraform/
+**/.pytest_cache
+**/__pycache__

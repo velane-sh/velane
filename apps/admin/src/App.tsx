@@ -16,6 +16,7 @@ import WorkflowExecutionsPage from './pages/WorkflowExecutionsPage'
 import EmbedPage from './pages/EmbedPage'
 import EmbedEntryPage from './pages/EmbedEntryPage'
 import VariablesPage from './pages/VariablesPage'
+import DataStorePage from './pages/DataStorePage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import MCPPage from './pages/MCPPage'
 import BillingPage from './pages/BillingPage'
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="mcp" element={<MCPPage />} />
           <Route path="variables" element={<VariablesPage />} />
+          <Route path="data-store" element={<DataStorePage />} />
           <Route path="billing" element={<BillingPage />} />
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="api-keys" replace />} />

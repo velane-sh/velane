@@ -35,5 +35,6 @@ flowchart LR
 ## Related docs
 
 - [Invocation Modes](./invocation-modes.md)
+- [KV Store](./kv-store.md)
 - [Auth and Request Flow](../auth-tenancy/auth-and-request-flow.md)
 - [Deployment Topology](../operations/deployment-topology.md)

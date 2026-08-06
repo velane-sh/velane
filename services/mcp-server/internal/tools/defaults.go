@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -12,6 +13,180 @@ import (
 )
 
 func (r *Registry) addDefaults() {
+	r.add(Tool{
+		Name:        "kv_get",
+		Description: "Get a JSON value from the tenant-wide KV store. The default namespace is shared by every workflow in the tenant. Returns null when the key is missing; a stored JSON null is indistinguishable from a missing key, so use kv_list with a prefix when that distinction matters.",
+		InputSchema: map[string]any{
+			"type":     "object",
+			"required": []string{"key"},
+			"properties": map[string]any{
+				"key":       map[string]any{"type": "string", "description": "Key to retrieve."},
+				"namespace": map[string]any{"type": "string", "description": "Optional namespace; omitted means the tenant-wide default namespace."},
+			},
+		},
+		Handle: func(ctx context.Context, authHeader string, args map[string]any) (any, error) {
+			key, err := toString(args, "key", true)
+			if err != nil {
+				return nil, err
+			}
+			namespace, err := toString(args, "namespace", false)
+			if err != nil {
+				return nil, err
+			}
+
+			var out struct {
+				Value json.RawMessage `json:"value"`
+			}
+			path := "/v1/kv/entry" + controlplane.Query(map[string]string{
+				"namespace": namespace,
+				"key":       key,
+			})
+			if err := r.client.Get(ctx, authHeader, path, &out); err != nil {
+				var statusErr *controlplane.StatusError
+				if errors.As(err, &statusErr) && statusErr.StatusCode == 404 {
+					return nil, nil
+				}
+				return nil, err
+			}
+			return out.Value, nil
+		},
+	})
+
+	r.add(Tool{
+		Name:        "kv_set",
+		Description: "Set a JSON value in the tenant-wide KV store. The default namespace is shared by every workflow in the tenant. ttl_seconds is optional, measured in seconds, and omitting it stores the value without an expiry.",
+		InputSchema: map[string]any{
+			"type":     "object",
+			"required": []string{"key", "value"},
+			"properties": map[string]any{
+				"key":         map[string]any{"type": "string", "description": "Key to set."},
+				"value":       map[string]any{"description": "Any JSON value, including an object, array, string, number, boolean, or null."},
+				"namespace":   map[string]any{"type": "string", "description": "Optional namespace; omitted means the tenant-wide default namespace."},
+				"ttl_seconds": map[string]any{"type": "integer", "description": "Optional time to live in seconds."},
+			},
+		},
+		Handle: func(ctx context.Context, authHeader string, args map[string]any) (any, error) {
+			key, err := toString(args, "key", true)
+			if err != nil {
+				return nil, err
+			}
+			namespace, err := toString(args, "namespace", false)
+			if err != nil {
+				return nil, err
+			}
+			value, err := toRawJSON(args, "value")
+			if err != nil {
+				return nil, err
+			}
+
+			body := map[string]any{"value": value}
+			if ttlValue, ok := args["ttl_seconds"]; ok && ttlValue != nil {
+				ttlSeconds, err := toInt(args, "ttl_seconds", false)
+				if err != nil {
+					return nil, err
+				}
+				body["ttl_seconds"] = ttlSeconds
+			}
+
+			var out map[string]any
+			path := "/v1/kv/entry" + controlplane.Query(map[string]string{
+				"namespace": namespace,
+				"key":       key,
+			})
+			if err := r.client.Put(ctx, authHeader, path, body, &out); err != nil {
+				return nil, err
+			}
+			return out, nil
+		},
+	})
+
+	r.add(Tool{
+		Name:        "kv_delete",
+		Description: "Delete a value from the tenant-wide KV store. The default namespace is shared by every workflow in the tenant. This cleanup operation is idempotent and returns deleted: false when the key is already missing.",
+		InputSchema: map[string]any{
+			"type":     "object",
+			"required": []string{"key"},
+			"properties": map[string]any{
+				"key":       map[string]any{"type": "string", "description": "Key to delete."},
+				"namespace": map[string]any{"type": "string", "description": "Optional namespace; omitted means the tenant-wide default namespace."},
+			},
+		},
+		Handle: func(ctx context.Context, authHeader string, args map[string]any) (any, error) {
+			key, err := toString(args, "key", true)
+			if err != nil {
+				return nil, err
+			}
+			namespace, err := toString(args, "namespace", false)
+			if err != nil {
+				return nil, err
+			}
+			path := "/v1/kv/entry" + controlplane.Query(map[string]string{
+				"namespace": namespace,
+				"key":       key,
+			})
+			if err := r.client.Delete(ctx, authHeader, path, nil); err != nil {
+				var statusErr *controlplane.StatusError
+				if errors.As(err, &statusErr) && statusErr.StatusCode == 404 {
+					return map[string]bool{"deleted": false}, nil
+				}
+				return nil, err
+			}
+			return map[string]bool{"deleted": true}, nil
+		},
+	})
+
+	r.add(Tool{
+		Name:        "kv_list",
+		Description: "List KV metadata without values. Omit namespace to list every namespace, or provide one to filter it. The default namespace is shared by every workflow in the tenant.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"namespace": map[string]any{"type": "string", "description": "Optional namespace. Omit to list every namespace; provide default to list only the tenant-wide default namespace."},
+				"prefix":    map[string]any{"type": "string", "description": "Optional literal key prefix."},
+				"limit":     map[string]any{"type": "integer", "description": "Maximum entries to return."},
+				"offset":    map[string]any{"type": "integer", "description": "Number of entries to skip."},
+			},
+		},
+		Handle: func(ctx context.Context, authHeader string, args map[string]any) (any, error) {
+			namespace, err := toString(args, "namespace", false)
+			if err != nil {
+				return nil, err
+			}
+			prefix, err := toString(args, "prefix", false)
+			if err != nil {
+				return nil, err
+			}
+			limit, err := toInt(args, "limit", false)
+			if err != nil {
+				return nil, err
+			}
+			offset, err := toInt(args, "offset", false)
+			if err != nil {
+				return nil, err
+			}
+
+			query := map[string]string{"prefix": prefix}
+			if _, ok := args["namespace"]; ok {
+				if namespace == "" {
+					namespace = "default"
+				}
+				query["namespace"] = namespace
+			}
+			if limit > 0 {
+				query["limit"] = fmt.Sprintf("%d", limit)
+			}
+			if offset > 0 {
+				query["offset"] = fmt.Sprintf("%d", offset)
+			}
+
+			var out map[string]any
+			if err := r.client.Get(ctx, authHeader, "/v1/kv/entries"+controlplane.Query(query), &out); err != nil {
+				return nil, err
+			}
+			return out, nil
+		},
+	})
+
 	r.add(Tool{
 		Name: "list_connections",
 		Description: `List OAuth integrations connected for this tenant.

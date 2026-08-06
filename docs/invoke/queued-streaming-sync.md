@@ -203,4 +203,5 @@ SSE is returned only when the caller sends `Accept: text/event-stream`; otherwis
 
 - [Invocation Modes](./invocation-modes.md)
 - [Request Lifecycle](./request-lifecycle.md)
+- [KV Store](./kv-store.md)
 - [MCP Overview](../mcp/overview.md)

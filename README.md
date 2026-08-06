@@ -74,6 +74,7 @@ Open the admin portal at **http://localhost:8092** and log in. That's it.
 - **Canary traffic splitting:** route X% of prod traffic to a new version
 - **Sync, async, and streaming:** blocking, background with webhook callback, and `text/event-stream`
 - **Secrets:** AES-256-GCM encrypted key-value pairs injected as env vars at invocation time
+- **Built-in snippet libraries:** `@velane/integrations` / `velane.integrations` for connected providers and `@velane/store` / `velane.store` for tenant-scoped state across invocations
 - **Egress policy:** per-tenant IP/CIDR and domain blocklist enforced inside the executor
 - **Observability:** per-invocation logs, metrics, and replay
 - **Embeddable dashboard:** white-label iframe viewer with short-lived embed tokens

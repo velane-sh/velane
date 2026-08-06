@@ -41,7 +41,10 @@ export default async function handler(input: Record<string, unknown>) {
 }
 ```
 
-Wire integration tools manually with `@velane/integrations` inside Mastra tool `execute` functions (see [Integrations Overview](../integrations/overview.md)).
+Velane's built-in libraries include `@velane/integrations` for provider calls
+and `@velane/store` for tenant-scoped state that persists across invocations.
+Wire integration tools manually with `@velane/integrations` inside Mastra tool
+`execute` functions (see [Integrations Overview](../integrations/overview.md)).
 
 ## Runtime limits
 
@@ -64,3 +67,4 @@ Agent workflows that import LangGraph or Mastra typically need higher `max_memor
 - [Invocation Modes](../invoke/invocation-modes.md)
 - [Environment Variables](../operations/environment-variables.md)
 - [Integrations Overview](../integrations/overview.md)
+- [KV Store](../invoke/kv-store.md)

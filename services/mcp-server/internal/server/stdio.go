@@ -26,7 +26,7 @@ func RunStdio(ctx context.Context, srv *Server, in io.Reader, out io.Writer, aut
 			continue
 		}
 		var req protocol.Request
-		if err := json.Unmarshal([]byte(line), &req); err != nil {
+		if err := decodeJSON([]byte(line), &req); err != nil {
 			resp := protocol.Error(nil, -32700, "parse error", err.Error())
 			if encodeErr := encoder.Encode(resp); encodeErr != nil {
 				return encodeErr

@@ -340,6 +340,7 @@ func (s *Scheduler) InvokeAsync(ctx context.Context, req InvokeRequest, callback
 	if err != nil {
 		return nil, fmt.Errorf("fetch secrets: %w", err)
 	}
+	s.injectProxyEnv(secrets, req.TenantID)
 
 	tenant, err := s.store.GetTenantByID(ctx, req.TenantID)
 	if err != nil {
@@ -513,6 +514,7 @@ func (s *Scheduler) InvokeStream(ctx context.Context, req InvokeRequest) (<-chan
 	if err != nil {
 		return nil, nil, fmt.Errorf("create invocation: %w", err)
 	}
+	s.injectProxyEnv(secrets, req.TenantID)
 
 	streamLibs, err := s.getLibraries(ctx, req.TenantID, tenant.Slug, string(snippet.Language))
 	if err != nil {

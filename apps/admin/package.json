@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test:api-reveal": "node scripts/test-api-reveal.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

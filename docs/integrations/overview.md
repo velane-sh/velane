@@ -17,6 +17,13 @@ Velane integrations are designed so snippet code can call provider APIs without 
 
 This keeps credentials out of snippet code and centralizes OAuth lifecycle handling.
 
+## Built-in libraries
+
+Velane provides `@velane/integrations` / `velane.integrations` for connected
+provider APIs and `@velane/store` / `velane.store` for tenant-scoped JSON state
+that persists across invocations. See [KV Store](../invoke/kv-store.md) for
+store usage and its plaintext-value constraints.
+
 ## Connect a provider
 
 In the admin portal:
@@ -63,3 +70,4 @@ If you are using Cursor or Claude Code, continue to [MCP Overview](../mcp/overvi
 
 - [Embed Mode vs Embed Dashboard](./embed-mode-vs-dashboard.md)
 - [Credentials and Scopes](../auth-tenancy/credentials-and-scopes.md)
+- [KV Store](../invoke/kv-store.md)

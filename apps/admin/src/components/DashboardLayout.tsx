@@ -6,6 +6,7 @@ import {
   Plug,
   Terminal,
   Lock,
+  Database,
   Settings,
   CreditCard,
   LogOut,
@@ -27,6 +28,7 @@ const allNavItems = [
   { to: '/dashboard/integrations', label: 'Integrations', icon: Plug, embedHidden: false, cloudOnly: false },
   { to: '/dashboard/mcp', label: 'MCP', icon: Terminal, embedHidden: false, cloudOnly: false },
   { to: '/dashboard/variables', label: 'Variables', icon: Lock, embedHidden: false, cloudOnly: false },
+  { to: '/dashboard/data-store', label: 'Data Store', icon: Database, embedHidden: true, cloudOnly: false },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings, embedHidden: true, cloudOnly: false },
   { to: '/dashboard/billing', label: 'Billing', icon: CreditCard, embedHidden: true, cloudOnly: true },
 ]

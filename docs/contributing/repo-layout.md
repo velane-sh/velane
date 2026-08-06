@@ -16,7 +16,9 @@ Velane is a monorepo with services, apps, and built-in libraries.
 - `services/cli`: command-line interface
 - `apps/admin`: main dashboard
 - `apps/embed-dashboard`: read-only embeddable dashboard
-- `platform-libraries`: built-in libraries for snippet runtimes
+- `platform-libraries`: built-in libraries for snippet runtimes, including
+  `@velane/integrations` / `velane.integrations` and `@velane/store` /
+  `velane.store`
 
 ## How to navigate quickly
 
