@@ -49,6 +49,7 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	versionsH := handlers.NewVersionsHandler(store, log).WithAuditor(auditor).WithHub(snippetHub)
 	invocationsH := handlers.NewInvocationsHandler(store, sched, log).WithAuthProvider(authProvider)
 	secretsH := handlers.NewSecretsHandler(store, log, encKey).WithAuditor(auditor)
+	kvH := handlers.NewKVHandler(store, log).WithAuditor(auditor)
 	gitIntH := handlers.NewGitIntegrationHandler(store, log)
 	webhookH := handlers.NewWebhookHandler(store, sched, log)
 	nangoWebhookH := handlers.NewNangoWebhookHandler(store, nangoClient, nangoWebhookSecret, nangoSecretKey, log)
@@ -141,10 +142,20 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	// Nango is never exposed directly to the browser; all static assets go through here.
 	r.Get("/v1/nango-assets/*", integrationsH.ProxyAsset)
 
-	// Internal proxy — no public auth middleware; network isolation is the boundary.
-	// Executor containers call /v1/proxy/{provider}/{path} with X-Velane-Tenant header.
+	// Internal proxy — no public auth middleware; it trusts X-Velane-Tenant.
+	// This route is externally reachable in shipped topologies, so callers that
+	// reach this port can name any tenant. Moving trust-header routes to a
+	// second, never-published listener is tracked as a separate follow-up.
 	// This path must NOT be added to the authenticated group below.
 	r.HandleFunc("/v1/proxy/{provider}/*", connectionsH.Proxy)
+
+	// Internal KV has no public auth middleware and trusts X-Velane-Tenant, like
+	// /v1/proxy/{provider}/*. The trust boundary is NOT enforced in any shipped
+	// deployment: callers that can reach this port can name any tenant. Moving
+	// trust-header routes to a second, never-published listener is tracked as a
+	// separate follow-up; do not describe this route as internal-only.
+	r.Get("/v1/internal/kv/entries", kvH.InternalListKV)
+	r.HandleFunc("/v1/internal/kv/entry", kvH.InternalKV)
 
 	// Authenticated routes.
 	r.Group(func(r chi.Router) {
@@ -261,6 +272,20 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 			Patch("/v1/secrets/{secretID}", secretsH.UpdateSecret)
 		r.With(middleware.RequireScope("manage", log)).
 			Delete("/v1/secrets/{secretID}", secretsH.DeleteSecret)
+
+		// Cross-invocation KV store.
+		r.With(middleware.RequireScope("invoke", log)).
+			Get("/v1/kv/entries", kvH.ListKV)
+		r.With(middleware.RequireScope("invoke", log)).
+			Get("/v1/kv/entry", kvH.GetKV)
+		r.With(middleware.RequireScope("invoke", log)).
+			Get("/v1/kv/namespaces", kvH.ListNamespaces)
+		r.With(middleware.RequireScope("manage", log)).
+			Put("/v1/kv/entry", kvH.SetKV)
+		r.With(middleware.RequireScope("manage", log)).
+			Delete("/v1/kv/entry", kvH.DeleteKV)
+		r.With(middleware.RequireScope("admin", log)).
+			Post("/v1/kv/reveal", kvH.RevealKV)
 
 		// Git integrations.
 		r.With(middleware.RequireScope("manage", log)).

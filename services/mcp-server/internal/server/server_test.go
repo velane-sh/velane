@@ -1,8 +1,10 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -142,6 +144,68 @@ func TestHandleJSONRPCInitializedNotification(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d; want 204", resp.StatusCode)
+	}
+}
+
+func TestKVToolsPreserveExactJSONNumbersOverJSONRPC(t *testing.T) {
+	const largeNumber = "9007199254740993"
+	var setValue json.RawMessage
+	cp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/v1/kv/entry":
+			var body struct {
+				Value json.RawMessage `json:"value"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			setValue = body.Value
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"key":"large"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/kv/entry":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"value":` + largeNumber + `}`))
+		default:
+			http.Error(w, "unexpected route", http.StatusNotFound)
+		}
+	}))
+	defer cp.Close()
+
+	httpSrv := httptest.NewServer(server.New(tools.NewRegistry(controlplane.New(cp.URL))).Router())
+	defer httpSrv.Close()
+
+	post := func(body string) []byte {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, httpSrv.URL+"/mcp", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer test")
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d; want 200", resp.StatusCode)
+		}
+		responseBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read response: %v", err)
+		}
+		return responseBody
+	}
+
+	post(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"kv_set","arguments":{"key":"large","value":` + largeNumber + `}}}`)
+	if got := string(setValue); got != largeNumber {
+		t.Fatalf("kv_set value = %s; want %s", got, largeNumber)
+	}
+
+	responseBody := post(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"kv_get","arguments":{"key":"large"}}}`)
+	if !bytes.Contains(responseBody, []byte(`"value":`+largeNumber)) {
+		t.Fatalf("kv_get response lost exact number: %s", responseBody)
 	}
 }
 

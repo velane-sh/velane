@@ -71,7 +71,7 @@ Variables (raw key-value env vars) remain unchanged — they cover API keys that
                         GitHub / Salesforce / Slack / ...
 ```
 
-**Key security property:** Nango has no `ports:` mapping in docker-compose — it is never reachable from outside the Docker network. The control plane proxy endpoint is only registered on the internal chi router. Snippet code calls the control plane (always whitelisted) and never directly calls Nango or provider APIs.
+**Key security property:** Nango has no `ports:` mapping in docker-compose — it is never reachable from outside the Docker network. The control plane proxy endpoint is registered on the public control-plane router without public authentication and is reachable in shipped topologies. Snippet code calls the control plane (always whitelisted) and never directly calls Nango or provider APIs.
 
 ---
 
@@ -219,7 +219,9 @@ Admin UI                    Control Plane               Nango
 
 ### 3. Integration Proxy
 
-New route group on the control plane — **internal only**, registered separately from the public router and only accessible from within the Docker network.
+New route group on the control plane, without public authentication middleware.
+It trusts `X-Velane-Tenant`; callers that can reach the control-plane port can
+choose that header in shipped topologies.
 
 ```
 POST/GET/PATCH/PUT/DELETE  /v1/proxy/{provider}/*
@@ -252,9 +254,15 @@ func (h *ConnectionsHandler) Proxy(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-**Routing strategy:** The proxy route is registered on a second `chi.Router` that binds on the same `:8080` port but under a path prefix (`/v1/proxy`) with no public auth middleware. Network isolation (executor containers can reach control-plane; external traffic cannot reach `/v1/proxy` because it's firewalled at the ingress layer) is the security boundary.
+**Routing strategy:** The proxy route is registered on the control plane's
+single `chi.Router` at `/v1/proxy` without public auth middleware. It trusts
+`X-Velane-Tenant` and is reachable from outside in shipped topologies; this is
+an accepted exposure. Moving the trust-header route families to a separate,
+never-published listener is tracked separately.
 
-For self-hosted operators running without Kubernetes, the docker-compose `networks:` config ensures executor containers are on the `internal` network and the proxy path is documented as internal-only.
+For self-hosted operators running without Kubernetes, Docker Compose still
+publishes the control-plane port. Its `networks:` configuration does not prevent
+an outside caller that reaches that port from setting `X-Velane-Tenant`.
 
 **Env vars injected at invocation time:**
 
@@ -611,8 +619,8 @@ For all other providers from Nango's catalog: base URL and docs URL are returned
 | Boundary | Mechanism |
 |---|---|
 | Nango not internet-accessible | No `ports:` in docker-compose; no ingress rule |
-| Proxy not callable from outside | `/v1/proxy/*` only registered on internal chi router; ingress blocks this path |
-| Snippet can't impersonate another tenant | `X-Velane-Tenant` header is set by the runner from injected `VELANE_TENANT_ID` env var; executor network only reaches control plane |
+| Proxy trust-header exposure | `/v1/proxy/*` is unauthenticated and reachable from outside in shipped topologies; a caller can choose `X-Velane-Tenant`. Separate-listener hardening is deferred. |
+| Tenant header behavior | Runners set `X-Velane-Tenant` from injected `VELANE_TENANT_ID`, but the trusting handler does not authenticate that caller-supplied header. |
 | No OAuth tokens in snippet env | Tokens live only in Nango; runner only receives `VELANE_PROXY_URL` and `VELANE_TENANT_ID` |
 | Variables (raw keys) still work | Injected as env vars same as before; orthogonal to integration proxy |
 | Nango secret key | Only on control plane; never in executor env |
@@ -711,10 +719,10 @@ GET    /v1/integrations                         no auth (public catalog)
 - **Invocation env injection** — in `InvocationsHandler.Invoke`, before dispatching to executor:
   - `VELANE_PROXY_URL = http://control-plane:8080`
   - `VELANE_TENANT_ID = <tenant UUID>`
-- **`@velane/integrations` built-in** — `platform-libraries/bun/integrations/` and `platform-libraries/python/integrations/` with `index.ts`, `module.py`, `meta.json`, `README.md`
+- **Built-in libraries** — `@velane/integrations` / `velane.integrations` and `@velane/store` / `velane.store`, with runtime-specific library files and documentation
 - **Remove all Salesforce platform libraries** — delete `platform-libraries/bun/salesforce-*/` and `platform-libraries/python/salesforce-*/` (10 bun + 10 python directories)
-- **`make copy-platform-libs`** — run after library changes; `@velane/integrations` becomes the only platform library
-- **Proxy router registration** — internal chi sub-router at `/v1/proxy`, not covered by public auth middleware, documented as internal-only
+- **`make copy-platform-libs`** — run after library changes to copy built-in libraries into the runtime
+- **Proxy router registration** — `/v1/proxy` is unauthenticated, trusts `X-Velane-Tenant`, and is reachable from outside in shipped topologies; separate-listener hardening is deferred
 
 ### Invocation change (pseudocode)
 
@@ -731,7 +739,7 @@ extraEnv := map[string]string{
 ### New internal routes
 
 ```
-GET|POST|PATCH|PUT|DELETE /v1/proxy/{provider}/*   (internal only, no public auth)
+GET|POST|PATCH|PUT|DELETE /v1/proxy/{provider}/*   (no public auth; trusts X-Velane-Tenant and is reachable from outside in shipped topologies)
 ```
 
 ### What's removed

@@ -194,6 +194,35 @@ export interface Secret {
   updated_at: string
 }
 
+/** KV metadata as returned by list endpoints. Never carries `value` — see KVEntry to read one. */
+export interface KVEntryMeta {
+  id: string
+  namespace: string
+  key: string
+  size_bytes: number
+  expires_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** A single entry including its plaintext value. Requires admin scope via the reveal endpoint. */
+export interface KVEntry extends KVEntryMeta {
+  value: unknown
+  /** Exact JSON text returned by the reveal endpoint, retained for lossless display. */
+  value_raw: string
+}
+
+export interface KVNamespace {
+  namespace: string
+  keys: number
+  size_bytes: number
+}
+
+export interface KVEntryList {
+  items: KVEntryMeta[]
+  total: number
+}
+
 export interface EmbedToken {
   id: string
   tenant_id: string

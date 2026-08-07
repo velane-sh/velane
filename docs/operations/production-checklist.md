@@ -20,7 +20,9 @@ Use this checklist before go-live.
 
 - Keep Nango internal-only (no public host port)
 - Expose only intended public interfaces
-- Ensure internal proxy paths are not internet-routable
+- **Unmet requirement:** trust-header proxy and internal-KV paths remain
+  reachable in shipped topologies. This stays unmet until separate-listener
+  hardening lands; see [Known Limitations](./known-limitations.md).
 
 ## Data and durability
 

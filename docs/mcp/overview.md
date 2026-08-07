@@ -17,6 +17,7 @@ MCP is not an addon workflow in Velane. It is a primary interface for agent-driv
 - invoke workflows
 - read logs and metrics
 - discover connected integrations
+- read and manage tenant KV state
 
 ## MCP endpoint
 
@@ -96,6 +97,24 @@ Current prompts:
 - integrations: list tenant connections, provider docs, and **agent framework docs** (`get_agent_framework_docs`)
 - operations: logs, metrics, secrets
 
+## KV tools
+
+The MCP server uses the authenticated public KV API and forwards the caller's
+credential. It does not send `X-Velane-Tenant`; tenant context comes from the
+credential.
+
+| Tool | Scope | Behavior |
+|---|---|---|
+| `kv_get` | `invoke` | Read one JSON value from the tenant-wide `default` namespace or an explicit namespace. Returns `null` for a missing or expired key. |
+| `kv_set` | `manage` | Store any JSON value. `ttl_seconds` is optional and measured in seconds; omitting it clears an existing expiry. |
+| `kv_delete` | `manage` | Delete one entry. Returns `{"deleted": false}` when the key is already missing, making cleanup idempotent. |
+| `kv_list` | `invoke` | Return the `{items,total}` metadata envelope. Omit `namespace` to list every namespace; provide it to filter to one namespace. |
+
+The KV store is shared tenant-wide by default. Use `namespace` to separate
+workflow state. `kv_get` cannot distinguish a missing key from a key whose
+stored JSON value is `null`, because both return `null`; use `kv_list` with a
+prefix when that distinction matters.
+
 ## Practical guidance
 
 - Keep API keys scoped to the least privilege needed
@@ -106,3 +125,4 @@ Current prompts:
 
 - [Integrations Overview](../integrations/overview.md)
 - [Invocation Modes](../invoke/invocation-modes.md)
+- [KV Store](../invoke/kv-store.md)

@@ -10,6 +10,7 @@ const dashboardRoutes: { path: string; title: string }[] = [
   { path: '/dashboard/integrations', title: 'Integrations' },
   { path: '/dashboard/mcp', title: 'MCP' },
   { path: '/dashboard/variables', title: 'Variables' },
+  { path: '/dashboard/data-store', title: 'Data Store' },
   { path: '/dashboard/settings/api-keys', title: 'API Keys' },
   { path: '/dashboard/settings/team', title: 'Team' },
   { path: '/dashboard/settings/branding', title: 'Branding' },

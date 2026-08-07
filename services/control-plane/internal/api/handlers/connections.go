@@ -329,10 +329,10 @@ func filterAndPaginateConnections(conns []*models.Connection, r *http.Request) [
 }
 
 // Proxy handles all methods on /v1/proxy/{provider}/*.
-// This endpoint is intentionally unauthenticated via the public middleware stack —
-// it is only reachable from the internal Docker network (executor containers).
-// It trusts the X-Velane-Tenant header, which is set by the executor runtime from
-// the VELANE_TENANT_ID env var injected at invocation time.
+// This endpoint is intentionally unauthenticated via the public middleware stack
+// and trusts the X-Velane-Tenant header. It is externally reachable in shipped
+// topologies, so callers that reach this port can name any tenant. Moving
+// trust-header routes to a second, never-published listener is tracked separately.
 func (h *ConnectionsHandler) Proxy(w http.ResponseWriter, r *http.Request) {
 	tenantID := strings.TrimSpace(r.Header.Get("X-Velane-Tenant"))
 	if tenantID == "" {

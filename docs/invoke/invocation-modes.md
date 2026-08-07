@@ -76,5 +76,6 @@ Best for:
 
 ## Related docs
 
+- [KV Store](./kv-store.md)
 - [Request Lifecycle](./request-lifecycle.md)
 - [Auth and Request Flow](../auth-tenancy/auth-and-request-flow.md)

@@ -17,6 +17,17 @@ type Client struct {
 	http    *http.Client
 }
 
+// StatusError is returned when the control plane responds with a non-success
+// status. Callers can inspect StatusCode without parsing Error's text.
+type StatusError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("control-plane error (%d): %s", e.StatusCode, e.Body)
+}
+
 func New(baseURL string) *Client {
 	baseURL = strings.TrimSuffix(baseURL, "/")
 	return &Client{
@@ -33,6 +44,14 @@ func (c *Client) Get(ctx context.Context, authHeader string, path string, out an
 
 func (c *Client) Post(ctx context.Context, authHeader string, path string, body any, out any) error {
 	return c.do(ctx, http.MethodPost, authHeader, path, body, out)
+}
+
+func (c *Client) Put(ctx context.Context, authHeader string, path string, body any, out any) error {
+	return c.do(ctx, http.MethodPut, authHeader, path, body, out)
+}
+
+func (c *Client) Delete(ctx context.Context, authHeader string, path string, out any) error {
+	return c.do(ctx, http.MethodDelete, authHeader, path, nil, out)
 }
 
 func (c *Client) PostWithHeaders(ctx context.Context, authHeader string, headers map[string]string, path string, body any, out any) error {
@@ -74,13 +93,13 @@ func (c *Client) PostWithHeaders(ctx context.Context, authHeader string, headers
 		return fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("control-plane error (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBytes)))
+		return &StatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(respBytes))}
 	}
 	if out == nil || len(respBytes) == 0 {
 		return nil
 	}
-	if err := json.Unmarshal(respBytes, out); err != nil {
-		return fmt.Errorf("decode response: %w", err)
+	if err := decodeResponse(respBytes, out); err != nil {
+		return err
 	}
 	return nil
 }
@@ -121,13 +140,28 @@ func (c *Client) do(ctx context.Context, method, authHeader, path string, body a
 	}
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("control-plane error (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBytes)))
+		return &StatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(respBytes))}
 	}
 
 	if out == nil || len(respBytes) == 0 {
 		return nil
 	}
-	if err := json.Unmarshal(respBytes, out); err != nil {
+	if err := decodeResponse(respBytes, out); err != nil {
+		return err
+	}
+	return nil
+}
+
+func decodeResponse(data []byte, out any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(out); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("decode response: invalid trailing data")
+		}
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil

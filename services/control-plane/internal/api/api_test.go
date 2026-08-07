@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/abskrj/velane/services/control-plane/internal/scheduler"
 	"github.com/abskrj/velane/services/control-plane/internal/store/postgres"
 	redisstore "github.com/abskrj/velane/services/control-plane/internal/store/redis"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
@@ -1263,5 +1265,459 @@ func TestReplayInvocation_RequiresManageScope(t *testing.T) {
 	rec := env.do(t, http.MethodPost, "/v1/invocations/"+invocationID+"/replay", env.invokeKey, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d; want 403\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// --- KV store ---
+
+func (e *testEnv) doRaw(t *testing.T, method, path, key string, body []byte, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, bytes.NewReader(body))
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+	rec := httptest.NewRecorder()
+	e.router.ServeHTTP(rec, req)
+	return rec
+}
+
+func kvEntryPath(key string) string {
+	return "/v1/kv/entry?key=" + url.QueryEscape(key)
+}
+
+func kvInternalEntryPath(key string) string {
+	return "/v1/internal/kv/entry?key=" + url.QueryEscape(key)
+}
+
+func setKVLimitsForAPI(t *testing.T, tenantID string, limits models.KVLimits) {
+	t.Helper()
+	raw, err := json.Marshal(limits)
+	if err != nil {
+		t.Fatalf("marshal KV limits: %v", err)
+	}
+	pool, err := pgxpool.New(context.Background(), os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("connect for KV limits update: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := pool.Exec(context.Background(), "UPDATE tenants SET kv_limits = $1::jsonb WHERE id = $2", raw, tenantID); err != nil {
+		t.Fatalf("update KV limits: %v", err)
+	}
+}
+
+func newKVTenantKey(t *testing.T, env *testEnv, scopes []string) (*models.Tenant, string) {
+	t.Helper()
+	tenant, err := env.store.CreateTenant(context.Background(), "KV Tenant", fmt.Sprintf("kv-tenant-%d", time.Now().UnixNano()))
+	if err != nil {
+		t.Fatalf("create KV tenant: %v", err)
+	}
+	_, key, err := env.store.CreateAPIKeyWithPlain(context.Background(), tenant.ID, "kv-key", scopes)
+	if err != nil {
+		t.Fatalf("create KV tenant key: %v", err)
+	}
+	return tenant, key
+}
+
+func TestKVSet_RequiresManageScope(t *testing.T) {
+	env := setup(t)
+	rec := env.do(t, http.MethodPut, kvEntryPath("scope"), env.invokeKey, map[string]any{"value": 1})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d; want 403\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestKVReveal_RequiresAdminScope(t *testing.T) {
+	env := setup(t)
+	rec := env.do(t, http.MethodPost, "/v1/kv/reveal", env.invokeKey, map[string]any{"key": "scope"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d; want 403\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestKVReveal_RejectsEmbedToken(t *testing.T) {
+	env := setup(t)
+	_, embedKey, err := env.store.CreateEmbedToken(context.Background(), env.tenant.ID, nil, time.Hour, "test")
+	if err != nil {
+		t.Fatalf("create embed token: %v", err)
+	}
+	put := env.do(t, http.MethodPut, kvEntryPath("embed"), embedKey, map[string]any{"value": true})
+	if put.Code != http.StatusOK {
+		t.Fatalf("embed PUT status = %d; want 200\nbody: %s", put.Code, put.Body.String())
+	}
+	reveal := env.do(t, http.MethodPost, "/v1/kv/reveal", embedKey, map[string]any{"key": "embed"})
+	if reveal.Code != http.StatusForbidden {
+		t.Fatalf("embed reveal status = %d; want 403\nbody: %s", reveal.Code, reveal.Body.String())
+	}
+}
+
+func TestKVEntry_TenantIsolation(t *testing.T) {
+	env := setup(t)
+	if rec := env.do(t, http.MethodPut, kvEntryPath("isolated"), env.manageKey, map[string]any{"value": "a"}); rec.Code != http.StatusOK {
+		t.Fatalf("set status = %d", rec.Code)
+	}
+	_, otherKey := newKVTenantKey(t, env, []string{"invoke", "manage"})
+	rec := env.do(t, http.MethodGet, kvEntryPath("isolated"), otherKey, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("cross-tenant get status = %d; want 404\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestKVListNeverReturnsValues(t *testing.T) {
+	env := setup(t)
+	if rec := env.do(t, http.MethodPut, kvEntryPath("redacted"), env.manageKey, map[string]any{"value": map[string]any{"secret": "value"}}); rec.Code != http.StatusOK {
+		t.Fatalf("set status = %d", rec.Code)
+	}
+	rec := env.do(t, http.MethodGet, "/v1/kv/entries", env.invokeKey, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), `"value"`) {
+		t.Fatalf("list response must structurally omit values: %s", rec.Body.String())
+	}
+}
+
+func TestKVKeyWithSlashRoundTrips(t *testing.T) {
+	env := setup(t)
+	path := kvEntryPath("user/42/profile")
+	if rec := env.do(t, http.MethodPut, path, env.manageKey, map[string]any{"value": map[string]any{"name": "Ada"}}); rec.Code != http.StatusOK {
+		t.Fatalf("set status = %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+	rec := env.do(t, http.MethodGet, path, env.invokeKey, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeJSON(t, rec)
+	if body["key"] != "user/42/profile" {
+		t.Errorf("key = %q; want slash-carrying key", body["key"])
+	}
+}
+
+func TestKVSet_RejectsOversizedValue(t *testing.T) {
+	env := setup(t)
+	max := models.DefaultKVLimits().MaxValueBytes
+	exact := strings.Repeat("a", int(max-2)) // JSON string quotes make its canonical size exactly max.
+	if rec := env.do(t, http.MethodPut, kvEntryPath("exact"), env.manageKey, map[string]any{"value": exact}); rec.Code != http.StatusOK {
+		t.Fatalf("exact-size value status = %d; want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+	over := strings.Repeat("a", int(max-1))
+	if rec := env.do(t, http.MethodPut, kvEntryPath("over"), env.manageKey, map[string]any{"value": over}); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("one-byte-over value status = %d; want 413\nbody: %s", rec.Code, rec.Body.String())
+	}
+	tooLarge := strings.Repeat("a", int(max+8192))
+	if rec := env.do(t, http.MethodPut, kvEntryPath("transport-over"), env.manageKey, map[string]any{"value": tooLarge}); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("body-cap value status = %d; want 413\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestKVSet_RawBodyCapIsSeparate(t *testing.T) {
+	env := setup(t)
+	max := models.DefaultKVLimits().MaxValueBytes
+	raw := []byte(`{"value":"` + strings.Repeat(`\u0061`, int((max+4097)/6)) + `"}`)
+	rec := env.doRaw(t, http.MethodPut, kvEntryPath("raw-cap"), env.manageKey, raw, nil)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("raw-large canonical-small status = %d; want 413\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestKVInternal_UnknownTenant(t *testing.T) {
+	env := setup(t)
+	headers := map[string]string{"X-Velane-Tenant": "not-a-real-tenant"}
+	put := env.doRaw(t, http.MethodPut, kvInternalEntryPath("missing"), "", []byte(`{"value":1}`), headers)
+	if put.Code != http.StatusNotFound {
+		t.Fatalf("internal PUT status = %d; want 404\nbody: %s", put.Code, put.Body.String())
+	}
+	get := env.doRaw(t, http.MethodGet, kvInternalEntryPath("missing"), "", nil, headers)
+	if get.Code != http.StatusNotFound {
+		t.Fatalf("internal GET status = %d; want 404\nbody: %s", get.Code, get.Body.String())
+	}
+}
+
+func TestKVSet_HonoursRaisedTenantLimit(t *testing.T) {
+	env := setup(t)
+	limits := models.DefaultKVLimits()
+	limits.MaxValueBytes = 200000
+	limits.MaxTotalBytes = 400000
+	setKVLimitsForAPI(t, env.tenant.ID, limits)
+	value := strings.Repeat("a", int(models.DefaultKVLimits().MaxValueBytes))
+	rec := env.do(t, http.MethodPut, kvEntryPath("raised"), env.manageKey, map[string]any{"value": value})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("raised-limit set status = %d; want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestKVSet_QuotaConflicts(t *testing.T) {
+	t.Run("max keys", func(t *testing.T) {
+		env := setup(t)
+		setKVLimitsForAPI(t, env.tenant.ID, models.KVLimits{MaxKeys: 1, MaxValueBytes: 100, MaxTotalBytes: 100})
+		env.do(t, http.MethodPut, kvEntryPath("first"), env.manageKey, map[string]any{"value": "a"})
+		rec := env.do(t, http.MethodPut, kvEntryPath("second"), env.manageKey, map[string]any{"value": "a"})
+		if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "max_keys") {
+			t.Fatalf("key quota status/body = %d/%s; want 409 naming max_keys", rec.Code, rec.Body.String())
+		}
+	})
+	t.Run("max total bytes", func(t *testing.T) {
+		env := setup(t)
+		setKVLimitsForAPI(t, env.tenant.ID, models.KVLimits{MaxKeys: 10, MaxValueBytes: 100, MaxTotalBytes: 4})
+		env.do(t, http.MethodPut, kvEntryPath("first"), env.manageKey, map[string]any{"value": "a"})
+		rec := env.do(t, http.MethodPut, kvEntryPath("second"), env.manageKey, map[string]any{"value": "b"})
+		if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "max_total_bytes") {
+			t.Fatalf("bytes quota status/body = %d/%s; want 409 naming max_total_bytes", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestKVSet_ClearsTTLOverHTTP(t *testing.T) {
+	env := setup(t)
+	if rec := env.do(t, http.MethodPut, kvEntryPath("ttl"), env.manageKey, map[string]any{"value": 1, "ttl_seconds": 60}); rec.Code != http.StatusOK {
+		t.Fatalf("set TTL status = %d", rec.Code)
+	}
+	rec := env.do(t, http.MethodPut, kvEntryPath("ttl"), env.manageKey, map[string]any{"value": 2})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear TTL status = %d\nbody: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeJSON(t, rec)
+	if expiresAt, exists := body["expires_at"]; exists && expiresAt != nil {
+		t.Fatalf("expires_at = %v; want null/omitted after clearing TTL", expiresAt)
+	}
+}
+
+func TestKVSet_Validation(t *testing.T) {
+	env := setup(t)
+	invalid := []string{"", strings.Repeat("a", 513), "bad\x01", " leading", "trailing ", "a/../b"}
+	for i, key := range invalid {
+		t.Run(fmt.Sprintf("invalid key %d", i), func(t *testing.T) {
+			rec := env.do(t, http.MethodPut, kvEntryPath(key), env.manageKey, map[string]any{"value": 1})
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("key %q status = %d; want 400", key, rec.Code)
+			}
+		})
+	}
+	for _, namespace := range []string{"UPPER", strings.Repeat("a", 65), "velane-x"} {
+		t.Run("invalid namespace "+namespace, func(t *testing.T) {
+			rec := env.do(t, http.MethodPut, "/v1/kv/entry?namespace="+namespace+"&key=valid", env.manageKey, map[string]any{"value": 1})
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("namespace %q status = %d; want 400", namespace, rec.Code)
+			}
+		})
+	}
+	for _, ttl := range []int{0, -1, 31536001} {
+		rec := env.do(t, http.MethodPut, kvEntryPath(fmt.Sprintf("ttl-%d", ttl)), env.manageKey, map[string]any{"value": 1, "ttl_seconds": ttl})
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("TTL %d status = %d; want 400", ttl, rec.Code)
+		}
+	}
+	for _, key := range []string{"a..b", "run.2026-08-04", "user/42/profile"} {
+		rec := env.do(t, http.MethodPut, kvEntryPath(key), env.manageKey, map[string]any{"value": true})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("allowed key %q status = %d; want 200\nbody: %s", key, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestKVSet_MissingValueVsNull(t *testing.T) {
+	env := setup(t)
+	missing := env.doRaw(t, http.MethodPut, kvEntryPath("missing"), env.manageKey, []byte(`{}`), nil)
+	if missing.Code != http.StatusBadRequest || !strings.Contains(missing.Body.String(), "value is required") {
+		t.Fatalf("missing value = %d/%s; want 400 value required", missing.Code, missing.Body.String())
+	}
+	null := env.doRaw(t, http.MethodPut, kvEntryPath("null"), env.manageKey, []byte(`{"value":null}`), nil)
+	if null.Code != http.StatusOK {
+		t.Fatalf("null value status = %d; want 200\nbody: %s", null.Code, null.Body.String())
+	}
+	trailing := env.doRaw(t, http.MethodPut, kvEntryPath("trailing"), env.manageKey, []byte(`{"value":1}{"value":2}`), nil)
+	if trailing.Code != http.StatusBadRequest {
+		t.Fatalf("trailing JSON status = %d; want 400\nbody: %s", trailing.Code, trailing.Body.String())
+	}
+}
+
+func TestKVList_AllNamespacesVsDefault(t *testing.T) {
+	env := setup(t)
+	env.do(t, http.MethodPut, kvEntryPath("default-key"), env.manageKey, map[string]any{"value": 1})
+	env.do(t, http.MethodPut, "/v1/kv/entry?namespace=sync&key=sync-key", env.manageKey, map[string]any{"value": 2})
+	all := env.do(t, http.MethodGet, "/v1/kv/entries", env.invokeKey, nil)
+	defaultOnly := env.do(t, http.MethodGet, "/v1/kv/entries?namespace=default", env.invokeKey, nil)
+	if all.Code != http.StatusOK || defaultOnly.Code != http.StatusOK {
+		t.Fatalf("list statuses all/default = %d/%d", all.Code, defaultOnly.Code)
+	}
+	allBody, defaultBody := decodeJSON(t, all), decodeJSON(t, defaultOnly)
+	if allBody["total"].(float64) != 2 || defaultBody["total"].(float64) != 1 {
+		t.Fatalf("all/default totals = %v/%v; want 2/1", allBody["total"], defaultBody["total"])
+	}
+}
+
+func TestKVList_LiteralPrefix(t *testing.T) {
+	env := setup(t)
+	for _, key := range []string{"50%off", "normal", "a_b", "ab"} {
+		env.do(t, http.MethodPut, kvEntryPath(key), env.manageKey, map[string]any{"value": 1})
+	}
+	percent := env.do(t, http.MethodGet, "/v1/kv/entries?prefix=%25", env.invokeKey, nil)
+	underscore := env.do(t, http.MethodGet, "/v1/kv/entries?prefix=a_", env.invokeKey, nil)
+	for name, rec := range map[string]*httptest.ResponseRecorder{"percent": percent, "underscore": underscore} {
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s prefix status = %d\nbody: %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	for _, tc := range []struct {
+		body *httptest.ResponseRecorder
+		want string
+	}{
+		{percent, ""},
+		{underscore, "a_b"},
+	} {
+		body := decodeJSON(t, tc.body)
+		items := body["items"].([]any)
+		if tc.want == "" && len(items) != 0 {
+			t.Fatalf("prefix items = %#v; want no keys merely containing %%", items)
+		}
+		if tc.want != "" && (len(items) != 1 || items[0].(map[string]any)["key"] != tc.want) {
+			t.Fatalf("prefix items = %#v; want only %q", items, tc.want)
+		}
+	}
+}
+
+func TestKVReveal_Validation(t *testing.T) {
+	env := setup(t)
+	env.do(t, http.MethodPut, kvEntryPath("reveal"), env.manageKey, map[string]any{"value": "ok"})
+	if rec := env.do(t, http.MethodPost, "/v1/kv/reveal", env.manageKey, map[string]any{"key": "reveal"}); rec.Code != http.StatusOK {
+		t.Fatalf("default namespace reveal status = %d", rec.Code)
+	}
+	for _, body := range [][]byte{
+		[]byte(`{}`), []byte(`{"namespace":"UPPER","key":"reveal"}`), []byte(`{"key":"a/../b"}`), []byte(`{`), []byte(`{"key":"reveal"}{}`),
+	} {
+		rec := env.doRaw(t, http.MethodPost, "/v1/kv/reveal", env.manageKey, body, nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("reveal validation body %q status = %d; want 400\nresponse: %s", body, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestKVInternalRequiresTenantHeader(t *testing.T) {
+	env := setup(t)
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+		rec := env.doRaw(t, method, kvInternalEntryPath("header"), "", []byte(`{"value":1}`), nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("internal %s missing header status = %d; want 400", method, rec.Code)
+		}
+	}
+	rec := env.doRaw(t, http.MethodPost, kvInternalEntryPath("header"), "", nil, map[string]string{"X-Velane-Tenant": env.tenant.ID})
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("internal POST status = %d; want 405", rec.Code)
+	}
+}
+
+func TestKVInternalPublicRoundTrip(t *testing.T) {
+	env := setup(t)
+	path := kvInternalEntryPath("shared")
+	put := env.doRaw(t, http.MethodPut, path, "", []byte(`{"value":{"from":"runtime"}}`), map[string]string{"X-Velane-Tenant": env.tenant.ID})
+	if put.Code != http.StatusOK {
+		t.Fatalf("internal PUT status = %d\nbody: %s", put.Code, put.Body.String())
+	}
+	get := env.do(t, http.MethodGet, kvEntryPath("shared"), env.invokeKey, nil)
+	if get.Code != http.StatusOK {
+		t.Fatalf("public GET status = %d\nbody: %s", get.Code, get.Body.String())
+	}
+	if value := decodeJSON(t, get)["value"].(map[string]any); value["from"] != "runtime" {
+		t.Fatalf("public value = %#v; want runtime value", value)
+	}
+}
+
+func TestKVCrossTenant_WriteAndDelete(t *testing.T) {
+	env := setup(t)
+	env.do(t, http.MethodPut, "/v1/kv/entry?namespace=sync&key=shared", env.manageKey, map[string]any{"value": "a"})
+	_, otherKey := newKVTenantKey(t, env, []string{"invoke", "manage"})
+	if rec := env.do(t, http.MethodPut, "/v1/kv/entry?namespace=sync&key=shared", otherKey, map[string]any{"value": "b"}); rec.Code != http.StatusOK {
+		t.Fatalf("tenant B PUT status = %d", rec.Code)
+	}
+	if rec := env.do(t, http.MethodDelete, "/v1/kv/entry?namespace=sync&key=shared", otherKey, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("tenant B delete its own row status = %d", rec.Code)
+	}
+	get := env.do(t, http.MethodGet, "/v1/kv/entry?namespace=sync&key=shared", env.invokeKey, nil)
+	if get.Code != http.StatusOK || decodeJSON(t, get)["value"] != "a" {
+		t.Fatalf("tenant A row was modified/deleted: %d %s", get.Code, get.Body.String())
+	}
+	// A second delete from B must not find A's row.
+	if rec := env.do(t, http.MethodDelete, "/v1/kv/entry?namespace=sync&key=shared", otherKey, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("tenant B delete A row status = %d; want 404", rec.Code)
+	}
+}
+
+func TestKVAudit(t *testing.T) {
+	env := setup(t)
+	set := env.do(t, http.MethodPut, kvEntryPath("audited"), env.manageKey, map[string]any{"value": "never-audit-this", "ttl_seconds": 60})
+	if set.Code != http.StatusOK {
+		t.Fatalf("set status = %d\nbody: %s", set.Code, set.Body.String())
+	}
+	entryID := decodeJSON(t, set)["id"].(string)
+	if rec := env.do(t, http.MethodPost, "/v1/kv/reveal", env.manageKey, map[string]any{"key": "audited"}); rec.Code != http.StatusOK {
+		t.Fatalf("reveal status = %d", rec.Code)
+	}
+	if rec := env.do(t, http.MethodDelete, kvEntryPath("audited"), env.manageKey, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d", rec.Code)
+	}
+	internal := env.doRaw(t, http.MethodPut, kvInternalEntryPath("unlogged"), "", []byte(`{"value":"runtime"}`), map[string]string{"X-Velane-Tenant": env.tenant.ID})
+	if internal.Code != http.StatusOK {
+		t.Fatalf("internal set status = %d", internal.Code)
+	}
+
+	var entries []*models.AuditEntry
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var err error
+		entries, err = env.store.ListAuditLog(context.Background(), env.tenant.ID, postgres.AuditQueryOpts{Limit: 200})
+		if err != nil {
+			t.Fatalf("list audit entries: %v", err)
+		}
+		seen := map[string]bool{}
+		for _, entry := range entries {
+			seen[entry.Action] = true
+		}
+		if seen["kv_set"] && seen["kv_reveal"] && seen["kv_delete"] {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	expected := map[string]map[string]any{
+		"kv_set":    {"namespace": "default", "key": "audited", "size_bytes": float64(len(`"never-audit-this"`)), "ttl_seconds": float64(60)},
+		"kv_reveal": {"namespace": "default", "key": "audited"},
+		"kv_delete": {"namespace": "default", "key": "audited"},
+	}
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if want, ok := expected[entry.Action]; ok {
+			if entry.TenantID != env.tenant.ID || entry.ResourceID != entryID {
+				t.Fatalf("%s audit identity = tenant %q/resource %q; want %q/%q", entry.Action, entry.TenantID, entry.ResourceID, env.tenant.ID, entryID)
+			}
+			var metadata map[string]any
+			if err := json.Unmarshal(entry.Metadata, &metadata); err != nil {
+				t.Fatalf("decode %s audit metadata: %v", entry.Action, err)
+			}
+			if string(entry.Metadata) == "" || strings.Contains(string(entry.Metadata), "never-audit-this") {
+				t.Fatalf("%s audit metadata leaks value: %s", entry.Action, entry.Metadata)
+			}
+			if len(metadata) != len(want) {
+				t.Fatalf("%s metadata = %#v; want exactly %#v", entry.Action, metadata, want)
+			}
+			for key, value := range want {
+				if metadata[key] != value {
+					t.Fatalf("%s metadata[%q] = %#v; want %#v", entry.Action, key, metadata[key], value)
+				}
+			}
+			seen[entry.Action] = true
+		}
+		if entry.ResourceID != "" && entry.Action == "kv_set" && strings.Contains(string(entry.Metadata), "unlogged") {
+			t.Fatal("internal KV write produced an audit row")
+		}
+	}
+	for action := range expected {
+		if !seen[action] {
+			t.Fatalf("missing %s audit row", action)
+		}
 	}
 }

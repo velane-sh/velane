@@ -24,6 +24,9 @@ import type {
   IntegrationConfig,
   MCPInfo,
   SSOConnection,
+  KVEntry,
+  KVEntryList,
+  KVNamespace,
 } from '../types'
 
 const BASE = '/api'
@@ -63,6 +66,7 @@ async function request<T>(
   body?: unknown,
   authType: 'session' | 'apikey' | 'none' = 'session',
   allowRefresh = true,
+  decoder?: (response: Response) => Promise<T>,
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -90,7 +94,7 @@ async function request<T>(
         throw new Error('Unauthenticated')
       }
       if (allowRefresh && await refreshSession()) {
-        return request(method, path, body, authType, false)
+        return request(method, path, body, authType, false, decoder)
       }
       window.location.href = '/login'
       throw new Error('Unauthenticated')
@@ -101,7 +105,74 @@ async function request<T>(
   }
 
   if (res.status === 204) return undefined as T
+  if (decoder) return decoder(res)
   return res.json()
+}
+
+// Extract a top-level JSON field without parsing its value. KV values may contain integers
+// beyond Number.MAX_SAFE_INTEGER, which JSON.parse would silently round before the drawer
+// can render them.
+export function rawJSONField(payload: string, field: string): string {
+  let i = payload.search(/\S/)
+  if (payload[i] !== '{') throw new Error(`Response is missing ${field}`)
+  i++
+  while (i < payload.length) {
+    while (/\s/.test(payload[i] ?? '')) i++
+    if (payload[i] === '}') break
+    if (payload[i] !== '"') throw new Error(`Response has an invalid ${field}`)
+
+    const keyStart = i
+    i = endOfJSONString(payload, i)
+    let key: string
+    try {
+      key = JSON.parse(payload.slice(keyStart, i))
+    } catch {
+      throw new Error(`Response has an invalid ${field}`)
+    }
+    while (/\s/.test(payload[i] ?? '')) i++
+    if (payload[i++] !== ':') throw new Error(`Response has an invalid ${field}`)
+    while (/\s/.test(payload[i] ?? '')) i++
+    const valueStart = i
+    i = endOfJSONValue(payload, i)
+    if (key === field) return payload.slice(valueStart, i)
+    while (/\s/.test(payload[i] ?? '')) i++
+    if (payload[i] !== ',') break
+    i++
+  }
+  throw new Error(`Response has an incomplete ${field}`)
+}
+
+function endOfJSONString(text: string, start: number): number {
+  let escaped = false
+  for (let i = start + 1; i < text.length; i++) {
+    if (escaped) escaped = false
+    else if (text[i] === '\\') escaped = true
+    else if (text[i] === '"') return i + 1
+  }
+  return text.length
+}
+
+function endOfJSONValue(text: string, start: number): number {
+  if (text[start] === '"') return endOfJSONString(text, start)
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let i = start; i < text.length; i++) {
+    const char = text[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') inString = true
+    else if (char === '{' || char === '[') depth++
+    else if (char === '}' || char === ']') {
+      if (depth === 0) return i
+      depth--
+    } else if (char === ',' && depth === 0) return i
+  }
+  return text.length
 }
 
 export const api = {
@@ -429,6 +500,38 @@ export const api = {
 
   async deleteSecret(id: string): Promise<void> {
     return request('DELETE', `/v1/secrets/${id}`, undefined, 'apikey')
+  },
+
+  // KV store
+  // Omitting namespace lists every namespace (the "All namespaces" filter); passing
+  // 'default' lists only the default one.
+  async listKVEntries(
+    filters: { namespace?: string; prefix?: string; limit?: number; offset?: number } = {},
+  ): Promise<KVEntryList> {
+    const params = new URLSearchParams()
+    if (filters.namespace) params.set('namespace', filters.namespace)
+    if (filters.prefix) params.set('prefix', filters.prefix)
+    if (filters.limit && filters.limit > 0) params.set('limit', String(Math.floor(filters.limit)))
+    if (filters.offset !== undefined && filters.offset >= 0) params.set('offset', String(Math.floor(filters.offset)))
+    const qs = params.toString()
+    return request('GET', `/v1/kv/entries${qs ? `?${qs}` : ''}`, undefined, 'apikey')
+  },
+
+  async listKVNamespaces(): Promise<KVNamespace[]> {
+    return request('GET', '/v1/kv/namespaces', undefined, 'apikey')
+  },
+
+  /** Reveals one plaintext value. Requires admin scope; throws on 403. */
+  async revealKVEntry(namespace: string, key: string): Promise<KVEntry> {
+    return request('POST', '/v1/kv/reveal', { namespace, key }, 'apikey', true, async response => {
+      const raw = await response.text()
+      return { ...JSON.parse(raw), value_raw: rawJSONField(raw, 'value') } as KVEntry
+    })
+  },
+
+  async deleteKVEntry(namespace: string, key: string): Promise<void> {
+    const params = new URLSearchParams({ namespace, key })
+    return request('DELETE', `/v1/kv/entry?${params.toString()}`, undefined, 'apikey')
   },
 
   // Embed tokens

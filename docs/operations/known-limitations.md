@@ -15,6 +15,11 @@ This page lists current limitations so teams can plan around them.
 - Some observability paths are still evolving across environments
 - Firecracker mode requires host-level KVM support and extra setup
 - Documentation references are being migrated to auto-generated sources
+- `/v1/proxy/*` and `/v1/internal/kv/*` trust a caller-supplied
+  `X-Velane-Tenant` header and are reachable from outside in shipped
+  topologies. Anyone who reaches the control-plane port can select a tenant;
+  separate-listener hardening is tracked separately. See
+  [Trust-Header Routes](../security/trust-header-routes.md).
 
 ## Operational implications
 
@@ -33,3 +38,4 @@ This page lists current limitations so teams can plan around them.
 - [Production Checklist](./production-checklist.md)
 - [Deployment Topology](./deployment-topology.md)
 - [MCP Overview](../mcp/overview.md)
+- [Trust-Header Routes](../security/trust-header-routes.md)

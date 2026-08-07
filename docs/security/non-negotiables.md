@@ -8,9 +8,16 @@ sidebar_position: 1
 
 This page summarizes the core security guarantees Velane is designed to keep.
 
-## Tenant isolation first
+## Authenticated tenant isolation
 
-Every tenant-scoped action must respect tenant boundaries. Cross-tenant access is denied.
+Public tenant-scoped routes, including `/v1/kv/*`, derive the tenant from an
+authenticated credential and apply a tenant predicate to every query.
+
+`/v1/proxy/*` and `/v1/internal/kv/*` are different: they trust a
+caller-supplied tenant header and are reachable from outside in shipped
+topologies. Their tenant predicates prevent accidental cross-tenant queries,
+but do not authenticate the tenant a caller selected. See
+[Trust-Header Routes](./trust-header-routes.md).
 
 ## No admin access for embed tokens
 
