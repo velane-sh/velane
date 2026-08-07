@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { InstanceProvider } from './contexts/InstanceContext'
 import LoginPage from './pages/LoginPage'
+import SSOLoginPage from './pages/SSOLoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardLayout from './components/DashboardLayout'
 import SettingsLayout from './components/SettingsLayout'
@@ -38,6 +39,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/login/sso" element={<SSOLoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route
           path="/dashboard"
