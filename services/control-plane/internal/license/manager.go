@@ -6,6 +6,7 @@ package license
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
@@ -13,12 +14,13 @@ import (
 )
 
 type Manager struct {
-	instanceKey string
-	client      *client
-	cache       *cache
-	planCache   sync.Map // license key → plan string
-	validator   *validator
-	log         *zap.Logger
+	instanceKey   string
+	devEnterprise bool
+	client        *client
+	cache         *cache
+	planCache     sync.Map // license key → plan string
+	validator     *validator
+	log           *zap.Logger
 }
 
 func NewManager(instanceKey string, log *zap.Logger) *Manager {
@@ -29,11 +31,15 @@ func NewManager(instanceKey string, log *zap.Logger) *Manager {
 	}
 
 	m := &Manager{
-		instanceKey: instanceKey,
-		client:      newClient(),
-		cache:       newCache(),
-		validator:   v,
-		log:         log,
+		instanceKey:   instanceKey,
+		devEnterprise: os.Getenv("VELANE_DEV_ENTERPRISE") == "true",
+		client:        newClient(),
+		cache:         newCache(),
+		validator:     v,
+		log:           log,
+	}
+	if m.devEnterprise {
+		log.Warn("development enterprise bypass enabled — do not use in production")
 	}
 
 	if instanceKey != "" {
@@ -53,6 +59,9 @@ func NewManager(instanceKey string, log *zap.Logger) *Manager {
 // IsEnabled reports whether the given feature is active for either the
 // provided tenant license key or the instance-level key.
 func (m *Manager) IsEnabled(ctx context.Context, feature string, tenantLicenseKey string) bool {
+	if m.devEnterprise {
+		return true
+	}
 	if tenantLicenseKey != "" {
 		features, err := m.featuresForKey(ctx, tenantLicenseKey)
 		if err == nil {
@@ -80,6 +89,9 @@ func (m *Manager) IsEnabled(ctx context.Context, feature string, tenantLicenseKe
 
 // InstanceFeatures returns the features available at the instance level.
 func (m *Manager) InstanceFeatures(ctx context.Context) []string {
+	if m.devEnterprise {
+		return enterpriseFeatures()
+	}
 	if m.instanceKey == "" {
 		return nil
 	}
@@ -131,6 +143,9 @@ func (m *Manager) featuresForKey(ctx context.Context, key string) ([]string, err
 // TenantStatus returns the plan, features, and validity for a given license key.
 // Returns ("free", nil, false) when the key is empty or invalid.
 func (m *Manager) TenantStatus(ctx context.Context, licenseKey string) (plan string, features []string, valid bool) {
+	if m.devEnterprise {
+		return "enterprise", enterpriseFeatures(), true
+	}
 	if licenseKey == "" {
 		return "free", nil, false
 	}
@@ -150,4 +165,8 @@ func (m *Manager) TenantStatus(ctx context.Context, licenseKey string) (plan str
 // InstanceStatus returns the plan, features, and validity for the instance-level license key.
 func (m *Manager) InstanceStatus(ctx context.Context) (plan string, features []string, valid bool) {
 	return m.TenantStatus(ctx, m.instanceKey)
+}
+
+func enterpriseFeatures() []string {
+	return []string{FeatureAuditLog, FeatureSSO, FeatureCustomRoles}
 }

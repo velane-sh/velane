@@ -25,8 +25,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(oauthError ? OAUTH_ERROR_MESSAGES[oauthError] ?? 'Sign-in failed.' : '')
   const [loading, setLoading] = useState(false)
-  const [org, setOrg] = useState('')
-  const [ssoLoading, setSSOLoading] = useState(false)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -41,12 +39,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleSSO = async (e: FormEvent) => {
-    e.preventDefault(); setError(''); setSSOLoading(true)
-    try { const discovery = await api.discoverSSO(org.trim().toLowerCase()); window.location.assign(discovery.start_url) }
-    catch (err) { setError(err instanceof Error ? err.message : 'SSO is not available for this organization'); setSSOLoading(false) }
   }
 
   return (
@@ -94,11 +86,6 @@ export default function LoginPage() {
           )}
 
           <SocialLoginButtons />
-
-          <form onSubmit={handleSSO} className="mb-6 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <label htmlFor="sso-org" className="block text-sm font-medium text-gray-700">Sign in with SSO</label>
-            <div className="flex gap-2"><input id="sso-org" required value={org} onChange={(e) => setOrg(e.target.value)} placeholder="organization-slug" className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-gray-900 focus:outline-none" /><button disabled={ssoLoading} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-50">{ssoLoading ? 'Starting…' : 'Continue'}</button></div>
-          </form>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -150,6 +137,12 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+
+          <p className="mt-5 text-center text-sm">
+            <Link to="/login/sso" className="font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline">
+              Sign in with enterprise SSO
+            </Link>
+          </p>
 
           <p className="mt-6 text-center text-sm text-gray-500">
             No account?{' '}
