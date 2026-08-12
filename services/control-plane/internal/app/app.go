@@ -149,6 +149,8 @@ func Bootstrap(ctx context.Context, log *zap.Logger) (*App, error) {
 		go w.Run(ctx)
 		log.Info("background worker started", zap.Int("workers", cfg.WorkerCount))
 		go runStaleInvocationReaper(ctx, store, log)
+		go worker.NewIntegrationEventWorker(redisClient, store, nangoClient, sched, log).Run(ctx)
+		log.Info("integration event worker started")
 	}
 
 	go telemetry.RunHeartbeat(ctx, store, cfg.PublicBaseURL, cfg.LicenseKey, log)
@@ -162,7 +164,7 @@ func Bootstrap(ctx context.Context, log *zap.Logger) (*App, error) {
 		GitHubOAuthClientID:     cfg.GitHubOAuthClientID,
 		GitHubOAuthClientSecret: cfg.GitHubOAuthClientSecret,
 	}
-	router := api.NewRouterWithJWT(store, sched, log, encKey, authProvider, pubKey, nangoClient,
+	router := api.NewRouterWithJWTAndEvents(store, sched, log, encKey, authProvider, pubKey, nangoClient, redisClient,
 		cfg.NangoInternalURL, cfg.NangoConnectURL, cfg.NangoApiURL,
 		cfg.NangoWebhookSecret, cfg.NangoSecretKey, cfg.MCPPublicURL,
 		platLibs, oauthCfg, licMgr)

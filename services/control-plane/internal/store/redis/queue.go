@@ -11,6 +11,46 @@ import (
 )
 
 const jobQueueKey = "velane:jobs"
+const integrationEventQueueKey = "velane:integration-events"
+
+type IntegrationEventJob struct {
+	ReceiptID string `json:"receipt_id"`
+	Attempt   int    `json:"attempt"`
+}
+
+func (c *Client) EnqueueIntegrationEvent(ctx context.Context, job IntegrationEventJob) error {
+	b, e := json.Marshal(job)
+	if e != nil {
+		return e
+	}
+	return c.rdb.LPush(ctx, integrationEventQueueKey, b).Err()
+}
+
+func (c *Client) DequeueIntegrationEvent(ctx context.Context) (*IntegrationEventJob, error) {
+	for {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		v, e := c.rdb.BRPop(ctx, time.Second, integrationEventQueueKey).Result()
+		if e != nil {
+			if errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) {
+				return nil, nil
+			}
+			if errors.Is(e, redis.Nil) {
+				continue
+			}
+			return nil, e
+		}
+		if len(v) < 2 {
+			return nil, fmt.Errorf("invalid integration event job")
+		}
+		var j IntegrationEventJob
+		if e = json.Unmarshal([]byte(v[1]), &j); e != nil {
+			return nil, e
+		}
+		return &j, nil
+	}
+}
 
 // EgressPolicyJob carries egress policy in an enqueued job.
 type EgressPolicyJob struct {
@@ -63,8 +103,6 @@ func (c *Client) Dequeue(ctx context.Context) (*Job, error) {
 			return nil, nil
 		}
 
-		// Use a finite timeout so cancellation is observed even when the Redis
-		// client is blocked waiting for a response from BRPOP.
 		result, err := c.rdb.BRPop(ctx, time.Second, jobQueueKey).Result()
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

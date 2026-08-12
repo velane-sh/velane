@@ -176,6 +176,10 @@
     "/v1/connections": {
       "get": { "operationId": "listConnections", "summary": "List connections for the authenticated token", "tags": ["Connections"], "x-required-scope": "invoke", "parameters": [{ "$ref": "#/components/parameters/Search" }, { "$ref": "#/components/parameters/Limit100" }, { "$ref": "#/components/parameters/Offset" }], "responses": { "200": { "description": "Connections", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Connection" } } } } } } }
     },
+    "/v1/connections/{connectionID}/sync-models": {
+      "parameters": [{ "name": "connectionID", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "operationId": "listConnectionSyncModels", "summary": "List sync models available for a connection", "tags": ["Connections"], "x-required-scope": "invoke", "responses": { "200": { "description": "Available sync models", "content": { "application/json": { "schema": { "type": "object", "required": ["models", "manual_entry"], "properties": { "models": { "type": "array", "items": { "type": "string" } }, "manual_entry": { "type": "boolean" } } } } } }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
     "/v1/integrations/{provider}/docs": {
       "parameters": [{ "$ref": "#/components/parameters/Provider" }],
       "get": { "operationId": "getIntegrationDocs", "summary": "Get integration provider documentation", "tags": ["Integrations"], "x-required-scope": "invoke", "responses": { "200": { "description": "Structured provider documentation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProviderDocs" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
@@ -196,6 +200,16 @@
       "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
       "get": { "operationId": "getSnippet", "summary": "Get a snippet", "tags": ["Snippets"], "responses": { "200": { "description": "Snippet", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Snippet" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
       "delete": { "operationId": "deleteSnippet", "summary": "Delete a snippet", "tags": ["Snippets"], "x-required-scope": "manage", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/v1/snippets/{snippetID}/triggers": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
+      "get": { "operationId": "listWorkflowTriggers", "summary": "List workflow triggers", "tags": ["Snippets"], "x-required-scope": "invoke", "responses": { "200": { "description": "Workflow triggers", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object" } } } } }, "403": { "$ref": "#/components/responses/Forbidden" } } },
+      "post": { "operationId": "createWorkflowTrigger", "summary": "Create a disabled workflow trigger", "tags": ["Snippets"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "201": { "description": "Workflow trigger created", "content": { "application/json": { "schema": { "type": "object" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/v1/snippets/{snippetID}/triggers/{triggerID}": {
+      "parameters": [{ "$ref": "#/components/parameters/SnippetID" }, { "name": "triggerID", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "patch": { "operationId": "updateWorkflowTrigger", "summary": "Update a workflow trigger", "tags": ["Snippets"], "x-required-scope": "manage", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } }, "responses": { "200": { "description": "Workflow trigger updated", "content": { "application/json": { "schema": { "type": "object" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "$ref": "#/components/responses/Forbidden" } } },
+      "delete": { "operationId": "deleteWorkflowTrigger", "summary": "Delete a workflow trigger", "tags": ["Snippets"], "x-required-scope": "admin", "responses": { "204": { "$ref": "#/components/responses/NoContent" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/v1/snippets/{snippetID}/environments": {
       "parameters": [{ "$ref": "#/components/parameters/SnippetID" }],
