@@ -6,6 +6,7 @@ import (
 
 	"github.com/abskrj/velane/services/control-plane/internal/ids"
 	"github.com/abskrj/velane/services/control-plane/internal/models"
+	"github.com/jackc/pgx/v5"
 )
 
 // AuditQueryOpts provides optional filters and pagination for audit log queries.
@@ -106,4 +107,15 @@ func itoa(i int) string {
 		i /= 10
 	}
 	return string(buf)
+}
+
+// AppendAuditLogTx inserts an audit record in an existing transaction so that
+// user intent, operation, event, and audit are committed atomically.
+func AppendAuditLogTx(ctx context.Context, tx pgx.Tx, entry models.AuditEntry) error {
+	metadata := entry.Metadata
+	if metadata == nil {
+		metadata = []byte("{}")
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO audit_log (id, tenant_id, actor_id, actor_type, action, resource_id, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)`, ids.New(), entry.TenantID, entry.ActorID, entry.ActorType, entry.Action, entry.ResourceID, metadata)
+	return err
 }

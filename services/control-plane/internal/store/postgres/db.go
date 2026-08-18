@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"crypto/ed25519"
 	_ "embed"
 	"fmt"
 	"time"
@@ -79,17 +80,53 @@ var migrationSQL22 string
 //go:embed migrations/023_workflow_triggers.sql
 var migrationSQL23 string
 
+//go:embed migrations/024_sandbox_control_plane.sql
+var migrationSQL24 string
+
+//go:embed migrations/025_sandbox_host_enrollment.sql
+var migrationSQL25 string
+
+//go:embed migrations/026_sandbox_dispatch_fencing.sql
+var migrationSQL26 string
+
+//go:embed migrations/027_sandbox_snapshot_multipart.sql
+var migrationSQL27 string
+
+//go:embed migrations/028_sandbox_lifecycle_artifact_manifest.sql
+var migrationSQL28 string
+
 // Store wraps a pgxpool.Pool and provides all database operations.
 type Store struct {
 	pool                *pgxpool.Pool
 	objects             objectstore.Store
 	objectGCGrace       time.Duration
 	invocationRetention time.Duration
+	watchdogSigner      ed25519.PrivateKey
+	snapshotObjects     objectstore.SnapshotStore
+}
+
+// ConfigureWatchdogLeaseSigner installs the private signing key used only for
+// short-lived watchdog grants. A nil key deliberately makes VM dispatch
+// unavailable rather than issuing an unsigned grant.
+func (s *Store) ConfigureWatchdogLeaseSigner(key ed25519.PrivateKey) {
+	s.watchdogSigner = append(ed25519.PrivateKey(nil), key...)
 }
 
 func (s *Store) SetObjectStore(objects objectstore.Store) {
 	s.objects = objects
+	if snapshots, ok := objects.(objectstore.SnapshotStore); ok {
+		s.snapshotObjects = snapshots
+	}
 }
+
+// SetSnapshotObjectStore is useful for narrow S3 fakes in snapshot tests.
+func (s *Store) SetSnapshotObjectStore(objects objectstore.SnapshotStore) {
+	s.snapshotObjects = objects
+}
+
+// HasSnapshotObjectStore reports the instantiated multipart provider, not an
+// environment label. It is used only for fail-closed capability admission.
+func (s *Store) HasSnapshotObjectStore() bool { return s != nil && s.snapshotObjects != nil }
 
 func (s *Store) ConfigureObjectMaintenance(gcGrace, invocationRetention time.Duration) {
 	s.objectGCGrace = gcGrace
@@ -109,7 +146,7 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 		return nil, fmt.Errorf("postgres ping: %w", err)
 	}
 
-	for i, sql := range []string{migrationSQL1, migrationSQL2, migrationSQL3, migrationSQL4, migrationSQL5, migrationSQL6, migrationSQL7, migrationSQL8, migrationSQL9, migrationSQL10, migrationSQL11, migrationSQL12, migrationSQL13, migrationSQL14, migrationSQL15, migrationSQL16, migrationSQL17, migrationSQL18, migrationSQL19, migrationSQL20, migrationSQL21, migrationSQL22, migrationSQL23} {
+	for i, sql := range []string{migrationSQL1, migrationSQL2, migrationSQL3, migrationSQL4, migrationSQL5, migrationSQL6, migrationSQL7, migrationSQL8, migrationSQL9, migrationSQL10, migrationSQL11, migrationSQL12, migrationSQL13, migrationSQL14, migrationSQL15, migrationSQL16, migrationSQL17, migrationSQL18, migrationSQL19, migrationSQL20, migrationSQL21, migrationSQL22, migrationSQL23, migrationSQL24, migrationSQL25, migrationSQL26, migrationSQL27, migrationSQL28} {
 		if _, err := pool.Exec(ctx, sql); err != nil {
 			pool.Close()
 			return nil, fmt.Errorf("running migration %d: %w", i+1, err)
@@ -123,3 +160,7 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 func (s *Store) Close() {
 	s.pool.Close()
 }
+
+// Pool exposes the pgx pool to the sandbox control-plane service for tightly
+// scoped read-only recipe/profile resolution. Invocation code does not use it.
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }

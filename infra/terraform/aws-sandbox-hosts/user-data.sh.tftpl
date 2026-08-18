@@ -1,0 +1,36 @@
+#!/bin/bash
+set -euo pipefail
+umask 027
+
+install -d -m 0750 /etc/velane-sandbox-host
+cat >/etc/velane-sandbox-host/agent.env <<CONFIG
+VELANE_SANDBOX_HOST_CONTROL_URL=https://${host_control_nlb_dns_name}:${host_control_port}
+VELANE_SANDBOX_HOST_CONTROL_TLS_SERVER_NAME=${host_control_tls_name}
+VELANE_SANDBOX_HOST_CONTROL_CA_FILE=${host_control_ca_bundle}
+VELANE_SANDBOX_HOST_CLIENT_CERT_FILE=${host_client_certificate}
+VELANE_SANDBOX_HOST_CLIENT_KEY_FILE=${host_client_private_key}
+VELANE_SANDBOX_HOST_POOL_ID=${sandbox_host_pool_id}
+VELANE_SANDBOX_HOST_BOOT_ID=$(cat /proc/sys/kernel/random/boot_id)
+VELANE_SANDBOX_HOST_LINEAGE_ID=${host_lineage_id}
+VELANE_SANDBOX_HOST_COMPATIBILITY_KEY=${host_compatibility_key}
+VELANE_SANDBOX_HOST_CLOUDWATCH_LOG_GROUP=${cloudwatch_log_group}
+SANDBOX_AGENT_JOURNAL=/var/lib/velane-sandbox-agent/journal.json
+SANDBOX_AGENT_STAGING_PATH=/var/lib/velane-sandbox-agent
+SANDBOX_AGENT_JAILER_UID=${sandbox_agent_jailer_uid}
+SANDBOX_AGENT_JAILER_GID=${sandbox_agent_jailer_gid}
+VELANE_SANDBOX_HOST_PROTOCOL_VERSION=v1
+VELANE_SANDBOX_HOST_AGENT_VERSION=ami-pinned
+FIRECRACKER_BINARY=/usr/local/bin/firecracker
+JAILER_BINARY=/usr/local/bin/jailer
+SANDBOX_WATCHDOG_LEASE_JOURNAL=/var/lib/velane-sandbox-watchdog/leases/journal.json
+SANDBOX_WATCHDOG_CONTROL_SOCKET=/run/velane-sandbox-watchdog/control.sock
+SANDBOX_WATCHDOG_PUBLIC_KEY_BASE64=$(cat ${watchdog_public_key_path})
+SANDBOX_WATCHDOG_AGENT_GROUP_ID=${sandbox_agent_jailer_gid}
+CONFIG
+chmod 0600 /etc/velane-sandbox-host/agent.env
+
+# The immutable AMI supplies and verifies the agent and root watchdog units.
+# Do not fetch code, credentials, or mutable host artifacts at boot.
+systemctl daemon-reload
+systemctl enable --now velane-sandbox-host-watchdog.service
+systemctl enable --now velane-sandbox-host-agent.service

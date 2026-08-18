@@ -5,6 +5,7 @@ import {
   Code,
   Plug,
   Terminal,
+  Layers3,
   Lock,
   Database,
   Settings,
@@ -27,6 +28,7 @@ const allNavItems = [
   { to: '/dashboard/snippets', label: 'Workflows', icon: Code, embedHidden: false, cloudOnly: false },
   { to: '/dashboard/integrations', label: 'Integrations', icon: Plug, embedHidden: false, cloudOnly: false },
   { to: '/dashboard/mcp', label: 'MCP', icon: Terminal, embedHidden: false, cloudOnly: false },
+  { to: '/dashboard/sandboxes', label: 'Sandboxes', icon: Layers3, embedHidden: true, cloudOnly: false, sandboxesOnly: true },
   { to: '/dashboard/variables', label: 'Variables', icon: Lock, embedHidden: false, cloudOnly: false },
   { to: '/dashboard/data-store', label: 'Data Store', icon: Database, embedHidden: true, cloudOnly: false },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings, embedHidden: true, cloudOnly: false },
@@ -49,7 +51,7 @@ export default function DashboardLayout() {
   const isEmbedMode = useEmbedMode()
   useSessionRefresh()
   const isEditorRoute = /^\/dashboard\/snippets\/.+/.test(location.pathname)
-  const { cloud } = useInstance()
+  const { cloud, sandboxesAvailable } = useInstance()
   const [orgs, setOrgs] = useState<OrgMembership[]>([])
   const [orgsLoading, setOrgsLoading] = useState(!isEmbedMode)
   const [orgsError, setOrgsError] = useState('')
@@ -62,7 +64,7 @@ export default function DashboardLayout() {
   const [creatingOrg, setCreatingOrg] = useState(false)
 
   const navItems = allNavItems.filter(item =>
-    (!isEmbedMode || !item.embedHidden) && (!item.cloudOnly || cloud)
+    (!isEmbedMode || !item.embedHidden) && (!item.cloudOnly || cloud) && (!item.sandboxesOnly || sandboxesAvailable)
   )
   const currentOrg = useMemo(
     () => orgs.find(org => org.slug === activeOrgSlug) ?? orgs[0] ?? null,

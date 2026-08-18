@@ -14,6 +14,7 @@ import (
 	"github.com/abskrj/velane/services/control-plane/internal/license"
 	"github.com/abskrj/velane/services/control-plane/internal/nango"
 	"github.com/abskrj/velane/services/control-plane/internal/platformlibs"
+	"github.com/abskrj/velane/services/control-plane/internal/sandboxcontrol"
 	"github.com/abskrj/velane/services/control-plane/internal/scheduler"
 	"github.com/abskrj/velane/services/control-plane/internal/store/postgres"
 	redisstore "github.com/abskrj/velane/services/control-plane/internal/store/redis"
@@ -24,19 +25,24 @@ import (
 
 // NewRouter builds and returns the fully configured chi router.
 func NewRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, nangoClient *nango.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, licMgr *license.Manager) *chi.Mux {
-	return newRouter(store, sched, log, encKey, authProvider, nil, nangoClient, nil, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, handlers.OAuthConfig{}, licMgr)
+	return newRouter(store, sched, log, encKey, authProvider, nil, nangoClient, nil, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, handlers.OAuthConfig{}, licMgr, nil, sandboxcontrol.StaticProvider{})
 }
 
 // NewRouterWithJWT builds the router and wires the RSA public key for the JWKS endpoint.
 func NewRouterWithJWT(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager) *chi.Mux {
-	return newRouter(store, sched, log, encKey, authProvider, pubKey, nangoClient, nil, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, oauthCfg, licMgr)
+	return newRouter(store, sched, log, encKey, authProvider, pubKey, nangoClient, nil, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, oauthCfg, licMgr, nil, sandboxcontrol.StaticProvider{})
 }
 
 func NewRouterWithJWTAndEvents(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, eventQueue *redisstore.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager) *chi.Mux {
-	return newRouter(store, sched, log, encKey, authProvider, pubKey, nangoClient, eventQueue, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, oauthCfg, licMgr)
+	return newRouter(store, sched, log, encKey, authProvider, pubKey, nangoClient, eventQueue, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, oauthCfg, licMgr, nil, sandboxcontrol.StaticProvider{})
 }
 
-func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, eventQueue *redisstore.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager) *chi.Mux {
+// NewRouterWithJWTAndEventsAndSandboxes adds sandbox routes only when a service is supplied.
+func NewRouterWithJWTAndEventsAndSandboxes(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, eventQueue *redisstore.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager, sandboxService *sandboxcontrol.Service, sandboxCapabilities sandboxcontrol.Provider) *chi.Mux {
+	return newRouter(store, sched, log, encKey, authProvider, pubKey, nangoClient, eventQueue, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL, platLibs, oauthCfg, licMgr, sandboxService, sandboxCapabilities)
+}
+
+func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logger, encKey []byte, authProvider auth.Provider, pubKey *rsa.PublicKey, nangoClient *nango.Client, eventQueue *redisstore.Client, nangoInternalURL, nangoConnectURL, nangoApiURL, nangoWebhookSecret, nangoSecretKey, mcpPublicURL string, platLibs []platformlibs.PlatformLib, oauthCfg handlers.OAuthConfig, licMgr *license.Manager, sandboxService *sandboxcontrol.Service, sandboxCapabilities sandboxcontrol.Provider) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware.
@@ -78,10 +84,16 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	usageH := handlers.NewUsageHandler(store, log)
 	apikeysH := handlers.NewAPIKeysHandler(store, log).WithAuditor(auditor)
 	auditH := handlers.NewAuditHandler(store, log)
-	instanceH := handlers.NewInstanceHandler(licMgr, log)
+	instanceH := handlers.NewInstanceHandler(licMgr, log, sandboxCapabilities)
 	billingH := handlers.NewBillingHandler(store, licMgr, log)
 	jwtProvider, _ := authProvider.(*auth.JWTProvider)
 	ssoH := handlers.NewSSOHandler(store, jwtProvider, licMgr, encKey, oauthCfg.PublicBaseURL, log, auditor)
+	var sandboxesH *handlers.SandboxesHandler
+	var sandboxRecipesH *handlers.SandboxRecipesHandler
+	if sandboxService != nil {
+		sandboxesH = handlers.NewSandboxesHandler(sandboxService, sandboxCapabilities, log)
+		sandboxRecipesH = handlers.NewSandboxRecipesHandler(sandboxService, sandboxCapabilities, log)
+	}
 
 	// Health check — no auth.
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -317,6 +329,36 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 		r.Get("/v1/metrics/snippets/{snippetID}", metricsH.GetSnippetMetrics)
 		r.With(middleware.RequireScope("manage", log)).
 			Post("/v1/invocations/{id}/replay", replayH.ReplayInvocation)
+
+		if sandboxesH != nil {
+			// Durable sandboxes are isolated from invocation runtime and reject embed mutations.
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandboxes", sandboxesH.List)
+			r.With(middleware.RequireScope("manage", log), middleware.RejectEmbedCredential).Post("/v1/sandboxes", sandboxesH.Create)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandboxes/{sandboxID}", sandboxesH.Get)
+			r.With(middleware.RequireScope("manage", log), middleware.RejectEmbedCredential).Post("/v1/sandboxes/{sandboxID}/start", sandboxesH.Start)
+			r.With(middleware.RequireScope("manage", log), middleware.RejectEmbedCredential).Post("/v1/sandboxes/{sandboxID}/stop", sandboxesH.Stop)
+			r.With(middleware.RequireScope("manage", log), middleware.RejectEmbedCredential).Post("/v1/sandboxes/{sandboxID}/restart", sandboxesH.Restart)
+			r.With(middleware.RequireScope("manage", log), middleware.RejectEmbedCredential).Post("/v1/sandboxes/{sandboxID}/snapshots", sandboxesH.Snapshot)
+			r.With(middleware.RequireScope("manage", log), middleware.RejectEmbedCredential).Post("/v1/sandboxes/{sandboxID}/retry", sandboxesH.Retry)
+			r.With(middleware.RequireScope("admin", log), middleware.RejectEmbedCredential).Delete("/v1/sandboxes/{sandboxID}", sandboxesH.Delete)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandboxes/{sandboxID}/snapshots", sandboxesH.ListSnapshots)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandboxes/{sandboxID}/snapshots/{snapshotID}", sandboxesH.GetSnapshot)
+			r.With(middleware.RequireScope("manage", log), middleware.RejectEmbedCredential).Post("/v1/sandboxes/{sandboxID}/snapshots/{snapshotID}/restore", sandboxesH.RestoreSnapshot)
+			r.With(middleware.RequireScope("admin", log), middleware.RejectEmbedCredential).Delete("/v1/sandboxes/{sandboxID}/snapshots/{snapshotID}", sandboxesH.DeleteSnapshot)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandbox-operations/{operationID}", sandboxesH.GetOperation)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandbox-profiles", sandboxesH.Profiles)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandboxes/{sandboxID}/events", sandboxesH.Events)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandboxes/{sandboxID}/logs", sandboxesH.Logs)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandbox-image-recipes", sandboxRecipesH.List)
+			r.With(middleware.RequireScope("admin", log), middleware.RejectEmbedCredential).Post("/v1/sandbox-image-recipes", sandboxRecipesH.Create)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandbox-image-recipes/{recipeID}", sandboxRecipesH.Get)
+			r.With(middleware.RequireScope("admin", log), middleware.RejectEmbedCredential).Delete("/v1/sandbox-image-recipes/{recipeID}", sandboxRecipesH.Delete)
+			r.With(middleware.RequireScope("invoke", log)).Get("/v1/sandbox-image-recipes/{recipeID}/versions", sandboxRecipesH.ListVersions)
+			r.With(middleware.RequireScope("admin", log), middleware.RejectEmbedCredential).Post("/v1/sandbox-image-recipes/{recipeID}/versions", sandboxRecipesH.CreateVersion)
+			r.With(middleware.RequireScope("admin", log)).Get("/v1/sandbox-image-recipes/{recipeID}/versions/{version}", sandboxRecipesH.GetVersion)
+			r.With(middleware.RequireScope("admin", log)).Get("/v1/sandbox-image-recipes/{recipeID}/versions/{version}/events", sandboxRecipesH.Events)
+			r.With(middleware.RequireScope("admin", log)).Get("/v1/sandbox-image-recipes/{recipeID}/versions/{version}/logs", sandboxRecipesH.Logs)
+		}
 
 		// Embed token management.
 		r.With(middleware.RequireScope("manage", log)).

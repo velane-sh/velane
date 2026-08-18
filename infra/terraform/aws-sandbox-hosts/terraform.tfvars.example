@@ -1,0 +1,50 @@
+# This is a disabled, operator-private example. Copy it to terraform.tfvars,
+# use a remote encrypted state backend, then review tofu plan before activation.
+region      = "us-east-1"
+name_prefix = "velane-sandbox-prod-a"
+
+# Reuse an existing production VPC, but allocate NEW private-only subnets for hosts.
+vpc_id   = "vpc-0123456789abcdef0"
+vpc_cidr = "10.42.0.0/16"
+private_subnet_cidrs = {
+  us-east-1a = "10.42.64.0/24"
+  us-east-1b = "10.42.65.0/24"
+}
+
+# Values are immutable for this lineage. Changing an AMI, instance type, or
+# compatibility key requires a fresh lineage and a second ASG; do not mutate it.
+ami_id                 = "ami-0123456789abcdef0"
+instance_type          = "c7i.metal"
+sandbox_host_pool_id   = "pool-REPLACE-WITH-PRIVATE-CONTROL-PLANE-ID"
+host_lineage_id        = "lineage-REPLACE-WITH-A-NEW-PRIVATE-ID"
+host_compatibility_key = "sha256:REPLACE-WITH-THE-CANONICAL-PRIVATE-KEY"
+
+# The private NLB forwards raw TCP; the Go host-control listener terminates mTLS.
+host_control_tls_server_name = "sandbox-hosts.internal.example.com"
+host_api_target_ips          = [] # Add only private host-control API target IPs after it is deployed.
+
+# Secret references are consumed only by the private host-control API backend.
+# Hosts receive only the AMI-baked server CA and enrollment-minted client
+# identity; do not put any PEM certificate, CA, or private key in tfvars.
+host_control_server_certificate_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:velane/sandbox-host-control/server"
+host_control_client_ca_secret_arn          = "arn:aws:secretsmanager:us-east-1:123456789012:secret:velane/sandbox-host-control/client-ca"
+
+# The matching watchdog public key is baked into the immutable AMI at this
+# root-owned path. Configure the control plane with the private half via
+# SANDBOX_WATCHDOG_SIGNING_PRIVATE_KEY_BASE64.
+watchdog_public_key_path = "/etc/velane-sandbox-host/watchdog-public-key.base64"
+
+# Deliberately disabled. Set min=desired=max=1 only for an isolated enrollment canary.
+min_hosts     = 0
+desired_hosts = 0
+max_hosts     = 0
+
+# KMS key policy recipients for the private control plane. The role policy JSON
+# output must also be attached to that role. Host instances never receive it.
+control_plane_principal_arns = [
+  "arn:aws:iam::123456789012:role/velane-private-host-control",
+]
+
+tags = {
+  Environment = "production"
+}

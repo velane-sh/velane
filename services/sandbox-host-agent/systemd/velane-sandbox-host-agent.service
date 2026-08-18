@@ -1,0 +1,22 @@
+[Unit]
+Description=Velane sandbox host agent
+After=velane-sandbox-host-watchdog.service
+Requires=velane-sandbox-host-watchdog.service
+
+[Service]
+Type=simple
+User=velane-sandbox
+Group=velane-sandbox
+EnvironmentFile=-/etc/velane-sandbox-host/agent.env
+ExecStart=/usr/local/bin/velane-sandbox-host-agent
+Restart=always
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateNetwork=no
+DeviceAllow=/dev/kvm rw
+ReadWritePaths=/var/lib/velane-sandbox-agent /sys/fs/cgroup/velane-sandboxes
+
+[Install]
+WantedBy=multi-user.target

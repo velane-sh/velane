@@ -1,4 +1,4 @@
-.PHONY: up down build logs seed tidy copy-platform-libs test-platform-libs openapi-check help
+.PHONY: up down build logs seed tidy copy-platform-libs test-platform-libs openapi-check sandbox-services-build sandbox-services-test sandbox-artifacts help
 
 ## tidy: run go mod tidy to generate/update go.sum (required before first build)
 tidy:
@@ -37,6 +37,27 @@ copy-platform-libs:
 ## build: compile the control-plane binary locally (requires Go 1.26+ and copy-platform-libs)
 build: copy-platform-libs
 	cd services/control-plane && go build ./...
+
+## sandbox-services-build: compile each standalone sandbox service module
+sandbox-services-build:
+	@for service in sandbox-host-agent sandbox-host-watchdog sandbox-guest-init sandbox-image-builder; do \
+		echo "--- Building $$service ---"; \
+		(cd services/$$service && go build ./...); \
+	done
+
+## sandbox-services-test: run ordinary (non-privileged) tests for standalone sandbox services
+sandbox-services-test:
+	@for service in sandbox-host-agent sandbox-host-watchdog sandbox-guest-init sandbox-image-builder; do \
+		echo "--- Testing $$service ---"; \
+		(cd services/$$service && go test -count=1 ./...); \
+	done
+
+## sandbox-artifacts: build local OCI packaging artifacts for sandbox AMI, rootfs, and builder workflows
+sandbox-artifacts:
+	docker build -f services/sandbox-host-agent/Dockerfile -t velane-sandbox-host-agent:local services/sandbox-host-agent
+	docker build -f services/sandbox-host-watchdog/Dockerfile -t velane-sandbox-host-watchdog:local services/sandbox-host-watchdog
+	docker build -f services/sandbox-guest-init/Dockerfile -t velane-sandbox-guest-init:local services/sandbox-guest-init
+	docker build -f services/sandbox-image-builder/Dockerfile -t velane-sandbox-image-builder:local services/sandbox-image-builder
 
 ## test-platform-libs: run unit tests for all platform libraries (no Salesforce credentials needed)
 ##   Requires: bun (https://bun.sh) and python3 with pytest (pip install pytest)

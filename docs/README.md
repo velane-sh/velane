@@ -53,5 +53,6 @@ Use Velane to:
 - [MCP](./mcp/overview.md)
 - [CLI](./cli/installation-and-auth.md)
 - [Operations](./operations/environment-variables.md)
+- [Sandbox Service Artifacts](./operations/sandbox-service-artifacts.md)
 - [Security](./security/non-negotiables.md)
 - [Contributing](./contributing/repo-layout.md)

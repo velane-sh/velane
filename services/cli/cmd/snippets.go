@@ -183,3 +183,14 @@ func newClient() (*client.Client, error) {
 	}
 	return client.New(apiURL, tenantSlug, key), nil
 }
+
+// newSandboxClient applies the sandbox request timeout without changing legacy
+// snippet or invocation client behavior, particularly long-lived streams.
+func newSandboxClient() (*client.Client, error) {
+	c, err := newClient()
+	if err != nil {
+		return nil, err
+	}
+	c.SetRequestTimeout(requestTimeout)
+	return c, nil
+}

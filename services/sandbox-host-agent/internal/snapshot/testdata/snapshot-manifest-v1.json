@@ -1,0 +1,22 @@
+{
+  "schema_version": "v1",
+  "manifest_id": "snapshot-manifest-golden",
+  "sandbox_id": "sandbox-golden",
+  "generation": 7,
+  "snapshot_mode": "full",
+  "firecracker_snapshot_type": "Full",
+  "lineage_id": "lineage-golden",
+  "source_host_compatibility_key": "host-key-golden",
+  "vm_restore_descriptor_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "snapshot_compatibility_key": "",
+  "machine_topology_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "device_topology_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "guest_image_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "drives": [
+    {"id":"root","mutable":false,"immutable_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id":"data","mutable":true}
+  ],
+  "artifacts": [],
+  "wrapped_data_key": "wrapped-key",
+  "encryption_context_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+}

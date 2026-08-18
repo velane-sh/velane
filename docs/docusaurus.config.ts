@@ -104,6 +104,7 @@ const config: Config = {
           items: [
             {label: 'Production checklist', to: '/operations/production-checklist'},
             {label: 'Environment variables', to: '/operations/environment-variables'},
+            {label: 'Sandbox service artifacts', to: '/operations/sandbox-service-artifacts'},
             {label: 'Security non-negotiables', to: '/security/non-negotiables'},
             {label: 'Contributing', to: '/contributing/dev-workflow'}
           ]
