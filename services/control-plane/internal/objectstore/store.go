@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 var ErrNotFound = errors.New("object not found")
@@ -18,6 +19,48 @@ type Store interface {
 	Delete(ctx context.Context, key string) error
 }
 
+// SnapshotStore only exposes scoped multipart capabilities to snapshot hosts.
+// Broad object-store credentials never leave the control plane.
+type SnapshotStore interface {
+	BeginSnapshotMultipart(context.Context, string, []SnapshotPartExpectation, time.Duration) (SnapshotMultipartUpload, error)
+	CompleteSnapshotMultipart(context.Context, SnapshotMultipartUpload, []SnapshotCompletedPart) (SnapshotObject, error)
+	AbortSnapshotMultipart(context.Context, SnapshotMultipartUpload) error
+	HeadSnapshotObject(context.Context, string, string) (SnapshotObject, error)
+}
+
+type SnapshotPartExpectation struct {
+	Number         int
+	Size           int64
+	ChecksumSHA256 string // base64-encoded SHA-256, as required by S3.
+}
+
+type SnapshotPartURL struct {
+	Number         int       `json:"number"`
+	URL            string    `json:"url"`
+	ChecksumSHA256 string    `json:"checksum_sha256"`
+	ExpiresAt      time.Time `json:"expires_at"`
+}
+
+type SnapshotMultipartUpload struct {
+	ObjectRef string            `json:"object_ref"`
+	UploadID  string            `json:"upload_id"`
+	Parts     []SnapshotPartURL `json:"parts"`
+}
+
+type SnapshotCompletedPart struct {
+	Number         int    `json:"number"`
+	ETag           string `json:"etag"`
+	ChecksumSHA256 string `json:"checksum_sha256"`
+}
+
+type SnapshotObject struct {
+	ObjectRef      string
+	Version        string
+	Size           int64
+	ETag           string
+	ChecksumSHA256 string
+}
+
 type Config struct {
 	Driver                string
 	Bucket                string
@@ -25,6 +68,7 @@ type Config struct {
 	S3Region              string
 	S3Endpoint            string
 	S3ForcePathStyle      bool
+	S3KMSKeyID            string
 	AzureAccountURL       string
 	AzureConnectionString string
 }

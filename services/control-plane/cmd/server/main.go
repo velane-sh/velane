@@ -38,6 +38,17 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
+	var hostSrv *http.Server
+	if a.HostRouter != nil {
+		hostSrv = &http.Server{Addr: a.SandboxHostListenAddr, Handler: a.HostRouter, TLSConfig: a.SandboxHostTLSConfig, ReadTimeout: 30 * time.Second, WriteTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second}
+		go func() {
+			log.Info("sandbox host server listening", zap.String("addr", hostSrv.Addr))
+			if err := hostSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				log.Fatal("sandbox host server error", zap.Error(err))
+			}
+		}()
+	}
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -56,6 +67,11 @@ func main() {
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("graceful shutdown failed", zap.Error(err))
+	}
+	if hostSrv != nil {
+		if err := hostSrv.Shutdown(shutdownCtx); err != nil {
+			log.Error("sandbox host graceful shutdown failed", zap.Error(err))
+		}
 	}
 	log.Info("server stopped")
 }

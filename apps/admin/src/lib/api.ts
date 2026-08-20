@@ -28,10 +28,31 @@ import type {
   KVEntry,
   KVEntryList,
   KVNamespace,
+  SandboxDetailResponse,
+  SandboxCursorResponse,
+  SandboxEvent,
+  SandboxListResponse,
+  SandboxLog,
+  SandboxOperationKind,
+  SandboxMutationResponse,
+  SandboxOperation,
+  SandboxProfile,
+  SandboxRecipe,
+  SandboxRecipeDocument,
+  SandboxRecipeVersion,
+  SandboxSnapshot,
+  InstanceInfo,
 } from '../types'
 
 const BASE = '/api'
 const SESSION_REFRESH_INTERVAL_MS = 14 * 60 * 1000
+
+export class APIError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string, readonly details?: unknown) {
+    super(message)
+    this.name = 'APIError'
+  }
+}
 
 function getStoredAPIKey(): string {
   return localStorage.getItem('apiKey') ?? ''
@@ -61,16 +82,26 @@ export async function refreshSession(): Promise<boolean> {
   return refreshInFlight
 }
 
+type RequestAuth = 'session' | 'apikey' | 'none'
+
+interface RequestOptions {
+  body?: unknown
+  headers?: Record<string, string>
+  authType?: RequestAuth
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
-  authType: 'session' | 'apikey' | 'none' = 'session',
+  authType: RequestAuth = 'session',
   allowRefresh = true,
   decoder?: (response: Response) => Promise<T>,
+  additionalHeaders?: Record<string, string>,
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...additionalHeaders,
   }
   if (authType === 'apikey') {
     const key = getStoredAPIKey()
@@ -95,19 +126,54 @@ async function request<T>(
         throw new Error('Unauthenticated')
       }
       if (allowRefresh && await refreshSession()) {
-        return request(method, path, body, authType, false, decoder)
+        return request(method, path, body, authType, false, decoder, additionalHeaders)
       }
       window.location.href = '/login'
       throw new Error('Unauthenticated')
     }
 
     const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error ?? res.statusText)
+    throw new APIError(err.error ?? err.message ?? res.statusText, res.status, err.code, err.details)
   }
 
   if (res.status === 204) return undefined as T
   if (decoder) return decoder(res)
   return res.json()
+}
+
+function requestWithOptions<T>(
+  method: string,
+  path: string,
+  { body, headers, authType = 'session' }: RequestOptions,
+): Promise<T> {
+  return request(method, path, body, authType, true, undefined, headers)
+}
+
+function mutationHeaders(idempotencyKey: string, generation?: number): Record<string, string> {
+  return {
+    'Idempotency-Key': idempotencyKey,
+    ...(generation === undefined ? {} : { 'If-Match': String(generation) }),
+  }
+}
+
+function listQuery(filters: { limit?: number; offset?: number }): string {
+  const params = new URLSearchParams()
+  if (filters.limit !== undefined) params.set('limit', String(filters.limit))
+  if (filters.offset !== undefined) params.set('offset', String(filters.offset))
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
+function sandboxCursorPath(id: string, resource: 'events' | 'logs', after?: string): string {
+  const params = new URLSearchParams({ limit: '50' })
+  if (after) params.set('after', after)
+  return `/v1/sandboxes/${id}/${resource}?${params.toString()}`
+}
+
+function recipeCursorPath(id: string, version: number, resource: 'events' | 'logs', after?: string): string {
+  const params = new URLSearchParams({ limit: '50' })
+  if (after) params.set('after', after)
+  return `/v1/sandbox-image-recipes/${id}/versions/${version}/${resource}?${params.toString()}`
 }
 
 // Extract a top-level JSON field without parsing its value. KV values may contain integers
@@ -177,6 +243,142 @@ function endOfJSONValue(text: string, start: number): number {
 }
 
 export const api = {
+  // Sandboxes
+  async listSandboxes(filters: { limit?: number; offset?: number } = {}): Promise<SandboxListResponse> {
+    const params = new URLSearchParams()
+    if (filters.limit) params.set('limit', String(filters.limit))
+    if (filters.offset !== undefined) params.set('offset', String(filters.offset))
+    const query = params.toString()
+    return request('GET', `/v1/sandboxes${query ? `?${query}` : ''}`, undefined, 'apikey')
+  },
+
+  async getSandbox(id: string): Promise<SandboxDetailResponse> {
+    return request('GET', `/v1/sandboxes/${id}`, undefined, 'apikey')
+  },
+
+  async createSandbox(data: { name: string; recipe_version_id: string; profile_version_id: string }, idempotencyKey: string): Promise<SandboxMutationResponse> {
+    return requestWithOptions('POST', '/v1/sandboxes', {
+      body: data,
+      headers: mutationHeaders(idempotencyKey),
+      authType: 'apikey',
+    })
+  },
+
+  async sandboxAction(id: string, action: Extract<SandboxOperationKind, 'start' | 'stop' | 'restart'>, idempotencyKey: string, generation?: number): Promise<SandboxMutationResponse> {
+    return requestWithOptions('POST', `/v1/sandboxes/${id}/${action}`, {
+      headers: mutationHeaders(idempotencyKey, generation),
+      authType: 'apikey',
+    })
+  },
+
+  async createSandboxSnapshot(id: string, idempotencyKey: string, generation?: number): Promise<SandboxMutationResponse> {
+    return requestWithOptions('POST', `/v1/sandboxes/${id}/snapshots`, {
+      headers: mutationHeaders(idempotencyKey, generation),
+      authType: 'apikey',
+    })
+  },
+
+  async deleteSandbox(id: string, deleteSnapshots: boolean, idempotencyKey: string, generation?: number): Promise<SandboxMutationResponse> {
+    return requestWithOptions('DELETE', `/v1/sandboxes/${id}`, {
+      body: { delete_snapshots: deleteSnapshots },
+      headers: mutationHeaders(idempotencyKey, generation),
+      authType: 'apikey',
+    })
+  },
+
+  async retrySandboxOperation(id: string, operationID: string, idempotencyKey: string, generation?: number): Promise<SandboxMutationResponse> {
+    return requestWithOptions('POST', `/v1/sandboxes/${id}/retry`, {
+      body: { operation_id: operationID },
+      headers: mutationHeaders(idempotencyKey, generation),
+      authType: 'apikey',
+    })
+  },
+
+  async listSandboxSnapshots(id: string, filters: { limit?: number; offset?: number } = {}): Promise<{ items: SandboxSnapshot[]; total: number }> {
+    const query = listQuery(filters)
+    return request('GET', `/v1/sandboxes/${id}/snapshots${query}`, undefined, 'apikey')
+  },
+
+  async getSandboxSnapshot(id: string, snapshotID: string): Promise<SandboxSnapshot> {
+    return request('GET', `/v1/sandboxes/${id}/snapshots/${snapshotID}`, undefined, 'apikey')
+  },
+
+  async restoreSandboxSnapshot(id: string, snapshotID: string, idempotencyKey: string, generation?: number): Promise<SandboxMutationResponse> {
+    return requestWithOptions('POST', `/v1/sandboxes/${id}/snapshots/${snapshotID}/restore`, {
+      headers: mutationHeaders(idempotencyKey, generation),
+      authType: 'apikey',
+    })
+  },
+
+  async deleteSandboxSnapshot(id: string, snapshotID: string, idempotencyKey: string, generation?: number): Promise<SandboxMutationResponse> {
+    return requestWithOptions('DELETE', `/v1/sandboxes/${id}/snapshots/${snapshotID}`, {
+      headers: mutationHeaders(idempotencyKey, generation),
+      authType: 'apikey',
+    })
+  },
+
+  async getSandboxOperation(id: string): Promise<SandboxOperation> {
+    return request('GET', `/v1/sandbox-operations/${id}`, undefined, 'apikey')
+  },
+
+  async listSandboxProfiles(): Promise<{ items: SandboxProfile[]; total: number }> {
+    return request('GET', '/v1/sandbox-profiles', undefined, 'apikey')
+  },
+
+  async listSandboxEvents(id: string, after?: string): Promise<SandboxCursorResponse<SandboxEvent>> {
+    return request('GET', sandboxCursorPath(id, 'events', after), undefined, 'apikey')
+  },
+
+  async listSandboxLogs(id: string, after?: string): Promise<SandboxCursorResponse<SandboxLog>> {
+    return request('GET', sandboxCursorPath(id, 'logs', after), undefined, 'apikey')
+  },
+
+  async listSandboxImageRecipes(filters: { limit?: number; offset?: number } = {}): Promise<{ items: SandboxRecipe[]; total: number }> {
+    return request('GET', `/v1/sandbox-image-recipes${listQuery(filters)}`, undefined, 'apikey')
+  },
+
+  async getSandboxImageRecipe(id: string): Promise<SandboxRecipe> {
+    return request('GET', `/v1/sandbox-image-recipes/${id}`, undefined, 'apikey')
+  },
+
+  async createSandboxImageRecipe(data: { name: string; slug?: string; description?: string }, idempotencyKey: string): Promise<{ recipe: SandboxRecipe; replayed: boolean }> {
+    return requestWithOptions('POST', '/v1/sandbox-image-recipes', {
+      body: data,
+      headers: mutationHeaders(idempotencyKey),
+      authType: 'apikey',
+    })
+  },
+
+  async deleteSandboxImageRecipe(id: string, idempotencyKey: string): Promise<void> {
+    return requestWithOptions('DELETE', `/v1/sandbox-image-recipes/${id}`, {
+      headers: mutationHeaders(idempotencyKey),
+      authType: 'apikey',
+    })
+  },
+
+  async listSandboxImageRecipeVersions(id: string, filters: { limit?: number; offset?: number } = {}): Promise<{ items: SandboxRecipeVersion[]; total: number }> {
+    return request('GET', `/v1/sandbox-image-recipes/${id}/versions${listQuery(filters)}`, undefined, 'apikey')
+  },
+
+  async getSandboxImageRecipeVersion(id: string, version: number): Promise<SandboxRecipeVersion> {
+    return request('GET', `/v1/sandbox-image-recipes/${id}/versions/${version}`, undefined, 'apikey')
+  },
+
+  async createSandboxImageRecipeVersion(id: string, document: SandboxRecipeDocument, idempotencyKey: string): Promise<{ version: SandboxRecipeVersion; operation: SandboxOperation; replayed: boolean }> {
+    return requestWithOptions('POST', `/v1/sandbox-image-recipes/${id}/versions`, {
+      body: document,
+      headers: mutationHeaders(idempotencyKey),
+      authType: 'apikey',
+    })
+  },
+
+  async listSandboxImageRecipeVersionEvents(id: string, version: number, after?: string): Promise<SandboxCursorResponse<SandboxEvent>> {
+    return request('GET', recipeCursorPath(id, version, 'events', after), undefined, 'apikey')
+  },
+
+  async listSandboxImageRecipeVersionLogs(id: string, version: number, after?: string): Promise<SandboxCursorResponse<SandboxLog>> {
+    return request('GET', recipeCursorPath(id, version, 'logs', after), undefined, 'apikey')
+  },
   // Auth
   async login(email: string, password: string): Promise<{ session_token: string; expires_at: string }> {
     return request('POST', '/v1/admin/auth/login', { email, password }, 'none')
@@ -565,7 +767,7 @@ export const api = {
   },
 
   // Instance
-  async getInstanceInfo(): Promise<{ cloud: boolean; plan: string; license_valid: boolean; features: string[] }> {
+  async getInstanceInfo(): Promise<InstanceInfo> {
     return request('GET', '/v1/instance/info', undefined, 'none')
   },
 

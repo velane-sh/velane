@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
-import { InstanceProvider } from './contexts/InstanceContext'
+import { InstanceProvider, useInstance } from './contexts/InstanceContext'
 import LoginPage from './pages/LoginPage'
 import SSOLoginPage from './pages/SSOLoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -21,6 +21,11 @@ import DataStorePage from './pages/DataStorePage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import MCPPage from './pages/MCPPage'
 import BillingPage from './pages/BillingPage'
+import SandboxListPage from './pages/SandboxListPage'
+import SandboxCreatePage from './pages/SandboxCreatePage'
+import SandboxDetailPage from './pages/SandboxDetailPage'
+import SandboxImageRecipesPage from './pages/SandboxImageRecipesPage'
+import SandboxImageRecipeDetailPage from './pages/SandboxImageRecipeDetailPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import SSOSettingsPage from './enterprise/SSOSettingsPage'
 
@@ -32,46 +37,63 @@ function RootRedirect() {
   return <Navigate to="/dashboard/overview" replace />
 }
 
+function AppRoutes() {
+  const { sandboxesAvailable } = useInstance()
+
+  return (
+    <Routes>
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login/sso" element={<SSOLoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="overview" replace />} />
+        <Route path="overview" element={<OverviewPage />} />
+        <Route path="snippets" element={<SnippetsPage />} />
+        <Route path="snippets/:id" element={<SnippetEditorPage />} />
+        <Route path="snippets/:id/executions" element={<WorkflowExecutionsPage />} />
+        <Route path="snippets/:id/settings" element={<WorkflowSettingsPage />} />
+        <Route path="integrations" element={<IntegrationsPage />} />
+        <Route path="mcp" element={<MCPPage />} />
+        <Route path="variables" element={<VariablesPage />} />
+        <Route path="data-store" element={<DataStorePage />} />
+        {sandboxesAvailable && (
+          <>
+            <Route path="sandboxes" element={<SandboxListPage />} />
+            <Route path="sandboxes/new" element={<SandboxCreatePage />} />
+            <Route path="sandboxes/:sandboxId" element={<SandboxDetailPage />} />
+            <Route path="sandbox-images" element={<SandboxImageRecipesPage />} />
+            <Route path="sandbox-images/:recipeId" element={<SandboxImageRecipeDetailPage />} />
+          </>
+        )}
+        <Route path="billing" element={<BillingPage />} />
+        <Route path="settings" element={<SettingsLayout />}>
+          <Route index element={<Navigate to="api-keys" replace />} />
+          <Route path="api-keys" element={<APIKeysPage />} />
+          <Route path="team" element={<TeamPage />} />
+          <Route path="branding" element={<BrandingPage />} />
+          <Route path="egress" element={<EgressPage />} />
+          <Route path="embed" element={<EmbedPage />} />
+          <Route path="sso" element={<SSOSettingsPage />} />
+        </Route>
+      </Route>
+    </Routes>
+  )
+}
+
 export default function App() {
   return (
     <InstanceProvider>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<RootRedirect />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/login/sso" element={<SSOLoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="overview" replace />} />
-          <Route path="overview" element={<OverviewPage />} />
-          <Route path="snippets" element={<SnippetsPage />} />
-          <Route path="snippets/:id" element={<SnippetEditorPage />} />
-          <Route path="snippets/:id/executions" element={<WorkflowExecutionsPage />} />
-          <Route path="snippets/:id/settings" element={<WorkflowSettingsPage />} />
-          <Route path="integrations" element={<IntegrationsPage />} />
-          <Route path="mcp" element={<MCPPage />} />
-          <Route path="variables" element={<VariablesPage />} />
-          <Route path="data-store" element={<DataStorePage />} />
-          <Route path="billing" element={<BillingPage />} />
-          <Route path="settings" element={<SettingsLayout />}>
-            <Route index element={<Navigate to="api-keys" replace />} />
-            <Route path="api-keys" element={<APIKeysPage />} />
-            <Route path="team" element={<TeamPage />} />
-            <Route path="branding" element={<BrandingPage />} />
-            <Route path="egress" element={<EgressPage />} />
-            <Route path="embed" element={<EmbedPage />} />
-            <Route path="sso" element={<SSOSettingsPage />} />
-          </Route>
-        </Route>
-      </Routes>
-    </BrowserRouter>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
     </InstanceProvider>
   )
 }

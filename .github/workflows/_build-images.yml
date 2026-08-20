@@ -37,6 +37,21 @@ jobs:
           - name: embed-dashboard
             context: ./apps/embed-dashboard
             dockerfile: apps/embed-dashboard/Dockerfile
+          # These are packaging artifacts, not invocation images. Host artifacts
+          # are consumed by an immutable AMI build; guest init is injected into
+          # a guest rootfs; the image builder runs only on a dedicated builder.
+          - name: sandbox-host-agent
+            context: ./services/sandbox-host-agent
+            dockerfile: services/sandbox-host-agent/Dockerfile
+          - name: sandbox-host-watchdog
+            context: ./services/sandbox-host-watchdog
+            dockerfile: services/sandbox-host-watchdog/Dockerfile
+          - name: sandbox-guest-init
+            context: ./services/sandbox-guest-init
+            dockerfile: services/sandbox-guest-init/Dockerfile
+          - name: sandbox-image-builder
+            context: ./services/sandbox-image-builder
+            dockerfile: services/sandbox-image-builder/Dockerfile
 
     permissions:
       contents: read

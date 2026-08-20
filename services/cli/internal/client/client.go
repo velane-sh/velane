@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -40,10 +41,7 @@ type InvocationResult struct {
 
 // Client is a typed HTTP client for the Velane control plane.
 type Client struct {
-	base   string
-	tenant string
-	key    string
-	http   *resty.Client
+	http *resty.Client
 }
 
 // New constructs a Client.
@@ -52,7 +50,12 @@ func New(base, tenant, key string) *Client {
 		SetBaseURL(base).
 		SetHeader("Authorization", "Bearer "+key).
 		SetHeader("X-Tenant", tenant)
-	return &Client{base: base, tenant: tenant, key: key, http: rc}
+	return &Client{http: rc}
+}
+
+// SetRequestTimeout bounds each HTTP request made by this client.
+func (c *Client) SetRequestTimeout(timeout time.Duration) {
+	c.http.SetTimeout(timeout)
 }
 
 // ListSnippets returns all snippets for the tenant.

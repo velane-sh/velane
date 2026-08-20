@@ -96,6 +96,82 @@ jobs:
       - name: Build
         run: go build ./...
 
+  sandbox-services:
+    name: Sandbox service tests (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - sandbox-host-agent
+          - sandbox-host-watchdog
+          - sandbox-guest-init
+          - sandbox-image-builder
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/${{ matrix.service }}/go.mod
+          cache: false
+
+      - name: Run unit tests
+        run: go test -count=1 ./...
+
+      - name: Build
+        run: go build ./...
+
+  sandbox-privileged-integration:
+    name: Sandbox privileged integration
+    # Configure this repository variable with a dedicated, self-hosted Linux
+    # runner label. The runner must be isolated, root-capable, KVM-enabled, and
+    # include Firecracker, jailer, and nftables. Without it, this contract is
+    # intentionally skipped rather than emulated on a hosted runner.
+    if: vars.SANDBOX_PRIVILEGED_RUNNER != ''
+    runs-on: ${{ vars.SANDBOX_PRIVILEGED_RUNNER }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go for host agent
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/sandbox-host-agent/go.mod
+          cache-dependency-path: services/sandbox-host-agent/go.sum
+
+      - name: Run host-agent KVM integration contract
+        run: sudo services/sandbox-host-agent/scripts/run-privileged-integration.sh
+
+      - name: Run watchdog nftables integration contract
+        run: sudo services/sandbox-host-watchdog/scripts/run-privileged-integration.sh
+
+  sandbox-artifacts:
+    name: Sandbox artifact build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - sandbox-host-agent
+          - sandbox-host-watchdog
+          - sandbox-guest-init
+          - sandbox-image-builder
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build OCI packaging artifact
+        run: >-
+          docker build
+          --file services/${{ matrix.service }}/Dockerfile
+          --tag velane-${{ matrix.service }}:ci
+          services/${{ matrix.service }}
+
   frontends:
     name: Frontend build (${{ matrix.app }})
     runs-on: ubuntu-latest

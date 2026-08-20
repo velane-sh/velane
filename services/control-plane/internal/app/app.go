@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -17,6 +19,9 @@ import (
 	"github.com/abskrj/velane/services/control-plane/internal/objectstore"
 	"github.com/abskrj/velane/services/control-plane/internal/observability"
 	"github.com/abskrj/velane/services/control-plane/internal/platformlibs"
+	"github.com/abskrj/velane/services/control-plane/internal/sandboxcontrol"
+	"github.com/abskrj/velane/services/control-plane/internal/sandboxcontrol/hostidentity"
+	hostaws "github.com/abskrj/velane/services/control-plane/internal/sandboxcontrol/hostidentity/aws"
 	"github.com/abskrj/velane/services/control-plane/internal/scheduler"
 	"github.com/abskrj/velane/services/control-plane/internal/store/postgres"
 	redisstore "github.com/abskrj/velane/services/control-plane/internal/store/redis"
@@ -29,10 +34,13 @@ import (
 // App holds all initialised dependencies. The caller owns the HTTP server lifecycle;
 // App just wires the pieces and exposes the router for extension.
 type App struct {
-	Router *chi.Mux
-	Store  *postgres.Store
-	Log    *zap.Logger
-	Port   string
+	Router                *chi.Mux
+	Store                 *postgres.Store
+	Log                   *zap.Logger
+	Port                  string
+	HostRouter            *chi.Mux
+	SandboxHostListenAddr string
+	SandboxHostTLSConfig  *tls.Config
 
 	redis *redisstore.Client
 }
@@ -73,6 +81,7 @@ func Bootstrap(ctx context.Context, log *zap.Logger) (*App, error) {
 			Driver: cfg.ObjectStorageDriver, Bucket: cfg.ObjectStorageBucket, Prefix: cfg.ObjectStoragePrefix,
 			S3Region: cfg.ObjectStorageS3Region, S3Endpoint: cfg.ObjectStorageS3Endpoint,
 			S3ForcePathStyle:      cfg.ObjectStorageS3ForcePathStyle,
+			S3KMSKeyID:            cfg.ObjectStorageS3KMSKeyID,
 			AzureAccountURL:       cfg.ObjectStorageAzureAccountURL,
 			AzureConnectionString: cfg.ObjectStorageAzureConnectionString,
 		})
@@ -164,17 +173,77 @@ func Bootstrap(ctx context.Context, log *zap.Logger) (*App, error) {
 		GitHubOAuthClientID:     cfg.GitHubOAuthClientID,
 		GitHubOAuthClientSecret: cfg.GitHubOAuthClientSecret,
 	}
-	router := api.NewRouterWithJWTAndEvents(store, sched, log, encKey, authProvider, pubKey, nangoClient, redisClient,
+	var sandboxService *sandboxcontrol.Service
+	var hostRouter *chi.Mux
+	var hostTLSConfig *tls.Config
+	var hostEnrollmentReady bool
+	if cfg.SandboxHostProtocolConfigured() {
+		hostTLSConfig, err = cfg.SandboxHostTLSConfig()
+		if err != nil {
+			return nil, fmt.Errorf("configure sandbox host mTLS: %w", err)
+		}
+		signingCAFile, signingKeyFile, certificateTTL, err := cfg.SandboxHostSignerConfig()
+		if err != nil {
+			return nil, fmt.Errorf("configure sandbox host certificate issuer: %w", err)
+		}
+		issuer, err := hostidentity.NewCertificateIssuer(signingCAFile, signingKeyFile, certificateTTL)
+		if err != nil {
+			return nil, fmt.Errorf("load sandbox host certificate issuer: %w", err)
+		}
+		poolID, accountID, region, asgName, amiID, launchTemplateID, err := cfg.SandboxHostAWSVerifierConfig()
+		if err != nil {
+			return nil, fmt.Errorf("configure sandbox host AWS verifier: %w", err)
+		}
+		reader, err := hostaws.NewQueryAPIReader(ctx, region, accountID)
+		if err != nil {
+			return nil, fmt.Errorf("configure sandbox host AWS reader: %w", err)
+		}
+		awsRoots, err := cfg.SandboxHostAWSIIDTrustRoots()
+		if err != nil {
+			return nil, fmt.Errorf("configure sandbox host AWS IID roots: %w", err)
+		}
+		lineageID, compatibilityKey, err := cfg.SandboxHostExpectedIdentity()
+		if err != nil {
+			return nil, fmt.Errorf("configure sandbox host expected identity: %w", err)
+		}
+		watchdogSigningKey, err := cfg.SandboxWatchdogSigningKey()
+		if err != nil {
+			return nil, fmt.Errorf("configure sandbox watchdog lease signer: %w", err)
+		}
+		store.ConfigureWatchdogLeaseSigner(ed25519.PrivateKey(watchdogSigningKey))
+		hostEnrollmentReady = true
+		verifier := hostaws.Verifier{Reader: reader, STSValidator: hostaws.HTTPSTSProofValidator{AccountID: accountID, Region: region}, TrustedRoots: awsRoots, Expected: hostaws.ExpectedPool{PoolID: poolID, AccountID: accountID, Region: region, AutoScalingGroup: asgName, AMIID: amiID, LaunchTemplateID: launchTemplateID, LineageID: lineageID, HostCompatibilityKey: compatibilityKey}}
+		hostRouter = api.NewHostRouter(store, api.HostEnrollmentManager{Store: store, Verifier: verifier, Issuer: issuer})
+		log.Info("sandbox host enrollment and fencing enabled", zap.String("host_listen_addr", cfg.SandboxHostListenAddr))
+	} else if cfg.SandboxControlEnabled {
+		log.Warn("sandbox control is enabled but host protocol prerequisites are incomplete; host enrollment and public sandbox mutations remain disabled")
+	}
+	capabilityProvider := sandboxcontrol.NewOperationalProvider(sandboxcontrol.OperationalDependencies{
+		ControlEnabled: cfg.SandboxControlEnabled, HostEnrollment: hostEnrollmentReady,
+		LifecyclePayloads: true, CommandDispatch: hostEnrollmentReady,
+		WatchdogSigner: hostEnrollmentReady, SnapshotStore: store.HasSnapshotObjectStore(),
+		// Snapshot key wrapping and image-builder dispatch are not wired yet.
+		// Leaving them nil prevents config labels from advertising dead paths.
+		HostCommands: store.SandboxHostCommandReadiness,
+	})
+	if cfg.SandboxControlEnabled {
+		sandboxService = sandboxcontrol.NewService(store, capabilityProvider)
+		go sandboxcontrol.NewManager(sandboxService, log).Run(ctx)
+	}
+	router := api.NewRouterWithJWTAndEventsAndSandboxes(store, sched, log, encKey, authProvider, pubKey, nangoClient, redisClient,
 		cfg.NangoInternalURL, cfg.NangoConnectURL, cfg.NangoApiURL,
 		cfg.NangoWebhookSecret, cfg.NangoSecretKey, cfg.MCPPublicURL,
-		platLibs, oauthCfg, licMgr)
+		platLibs, oauthCfg, licMgr, sandboxService, capabilityProvider)
 
 	return &App{
-		Router: router,
-		Store:  store,
-		Log:    log,
-		Port:   cfg.Port,
-		redis:  redisClient,
+		Router:                router,
+		Store:                 store,
+		Log:                   log,
+		Port:                  cfg.Port,
+		HostRouter:            hostRouter,
+		SandboxHostListenAddr: cfg.SandboxHostListenAddr,
+		SandboxHostTLSConfig:  hostTLSConfig,
+		redis:                 redisClient,
 	}, nil
 }
 

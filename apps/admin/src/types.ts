@@ -302,3 +302,197 @@ export interface InvocationLogResponse {
   snippet_id: string
   items: InvocationSummary[]
 }
+
+export interface InstanceCapabilities {
+  sandboxes?: boolean
+  sandbox_profiles?: boolean
+  sandbox_image_recipes?: boolean
+  sandbox_operations?: boolean
+  sandbox_snapshots?: boolean
+  sandbox_events?: boolean
+  sandbox_logs?: boolean
+}
+
+export interface InstanceInfo {
+  cloud: boolean
+  plan: string
+  license_valid: boolean
+  features: string[]
+  capabilities?: InstanceCapabilities
+}
+
+export type SandboxDesiredState = 'running' | 'stopped' | 'deleted'
+export type SandboxObservedState =
+  | 'pending'
+  | 'awaiting_capacity'
+  | 'provisioning'
+  | 'bootstrapping'
+  | 'restoring'
+  | 'running'
+  | 'snapshotting'
+  | 'stopping'
+  | 'stopped'
+  | 'recovering'
+  | 'deleting'
+  | 'failed'
+
+export type SandboxOperationKind =
+  | 'recipe_build'
+  | 'create'
+  | 'start'
+  | 'stop'
+  | 'restart'
+  | 'snapshot'
+  | 'restore'
+  | 'recover'
+  | 'delete'
+  | 'snapshot_delete'
+
+export type SandboxOperationState = 'queued' | 'claimed' | 'dispatched' | 'waiting' | 'succeeded' | 'failed' | 'cancelled'
+export interface SandboxOperation {
+  id: string
+  sandbox_id?: string
+  recipe_version_id?: string
+  snapshot_id?: string
+  retry_of_operation_id?: string
+  kind: SandboxOperationKind
+  state: SandboxOperationState
+  requested_generation?: number
+  attempt?: number
+  max_attempts?: number
+  deadline_at?: string
+  failure_code?: string
+  failure_message?: string
+  result?: unknown
+  created_at: string
+  updated_at: string
+}
+
+export type SandboxSnapshotState = 'requested' | 'uploading' | 'verifying' | 'ready' | 'failed' | 'deleting' | 'deleted'
+
+export interface SandboxSnapshot {
+  id: string
+  sandbox_id: string
+  operation_id: string
+  generation: number
+  kind: 'periodic' | 'manual' | 'stop' | 'drain' | 'recovery'
+  state: SandboxSnapshotState
+  manifest_version: string
+  total_bytes: number
+  failure_code?: string
+  failure_message?: string
+  created_at: string
+}
+
+export interface SandboxProfile {
+  id: string
+  profile_family: string
+  name: string
+  version: string
+  status: 'active' | 'unavailable' | 'retired'
+  vcpu: number
+  memory_mb: number
+}
+
+export interface SandboxRecipe {
+  id: string
+  name: string
+  slug: string
+  description: string
+  created_at: string
+  updated_at: string
+}
+
+export type SandboxRecipeStatus = 'queued' | 'building' | 'ready' | 'failed' | 'retired'
+
+export interface SandboxRecipeVersion {
+  id: string
+  recipe_id: string
+  version_number: number
+  schema_version: string
+  status: SandboxRecipeStatus
+  failure_code?: string
+  failure_message?: string
+  document?: SandboxRecipeDocument
+  created_at: string
+}
+
+export interface SandboxRecipeDocument {
+  schema_version: '1'
+  platform: 'linux'
+  architecture: string
+  base_image: string
+  environment?: Record<string, string>
+  install_groups?: SandboxRecipeInstallGroup[]
+  profile_version_ids: string[]
+  bootstrap?: { script: string; timeout_seconds: number }
+  external_inputs?: SandboxExternalInput[]
+  guest_protocol: string
+}
+
+export interface SandboxRecipeInstallGroup {
+  repository_snapshot: string
+  index_digest: string
+  lock_digest: string
+  packages: Array<{ name: string; version: string; digest: string }>
+}
+
+export interface SandboxExternalInput {
+  url: string
+  sha256: string
+  size: number
+}
+
+export interface SandboxEvent {
+  id: string
+  type: string
+  level: 'info' | 'warning' | 'error'
+  message: string
+  details?: unknown
+  created_at: string
+}
+
+export interface SandboxLog {
+  id: string
+  source: string
+  stream: string
+  message: string
+  created_at: string
+}
+
+export interface Sandbox {
+  id: string
+  name: string
+  desired_state: SandboxDesiredState
+  observed_state: SandboxObservedState
+  recipe_version_id: string
+  profile_version_id: string
+  generation: number
+  latest_snapshot_id?: string | null
+  failure_code?: string
+  failure_message?: string
+  created_at: string
+  updated_at: string
+  available_actions?: SandboxOperationKind[]
+}
+
+export interface SandboxListResponse {
+  items: Sandbox[]
+  total: number
+}
+
+export interface SandboxDetailResponse {
+  sandbox: Sandbox
+  available_actions: SandboxOperationKind[]
+}
+
+export interface SandboxMutationResponse {
+  sandbox?: Sandbox
+  operation: SandboxOperation
+  replayed: boolean
+}
+
+export interface SandboxCursorResponse<T> {
+  items: T[]
+  next_cursor?: string
+}

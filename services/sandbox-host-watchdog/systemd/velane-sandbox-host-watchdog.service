@@ -1,0 +1,23 @@
+[Unit]
+Description=Velane sandbox independent lease watchdog
+Before=velane-sandbox-host-agent.service
+After=local-fs.target
+
+[Service]
+EnvironmentFile=-/etc/velane-sandbox-host/watchdog.env
+EnvironmentFile=-/etc/velane-sandbox-host/agent.env
+Type=simple
+User=root
+ExecStart=/usr/local/bin/velane-sandbox-host-watchdog
+Restart=always
+RestartSec=1
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/velane-sandbox-watchdog /var/lib/velane-sandbox-watchdog
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_KILL
+AmbientCapabilities=CAP_NET_ADMIN CAP_KILL
+
+[Install]
+WantedBy=multi-user.target
