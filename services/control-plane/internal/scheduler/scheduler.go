@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
+	"github.com/abskrj/velane/services/control-plane/internal/callerid"
 	"github.com/abskrj/velane/services/control-plane/internal/executor"
 	"github.com/abskrj/velane/services/control-plane/internal/models"
 	"github.com/abskrj/velane/services/control-plane/internal/observability"
@@ -46,10 +48,11 @@ type Queue interface {
 type InvokeRequest struct {
 	TenantID      string
 	SnippetSlug   string
-	Env           string // "dev" | "staging" | "prod"
-	Input         string // raw JSON
-	PinnedVersion int    // 0 = use active version from environment
-	InvokeMode    string // "sync" | "stream"; used when sync runs through the queue
+	Env           string                // "dev" | "staging" | "prod"
+	Input         string                // raw JSON
+	PinnedVersion int                   // 0 = use active version from environment
+	Caller        models.CallerIdentity // principal whose group access the sandbox inherits
+	InvokeMode    string                // "sync" | "stream"; used when sync runs through the queue
 }
 
 // Scheduler resolves, executes, and records snippet invocations.
@@ -136,11 +139,35 @@ func (s *Scheduler) getLibraries(ctx context.Context, tenantID, tenantSlug, lang
 
 // injectProxyEnv adds VELANE_PROXY_URL and VELANE_TENANT_ID to the env map so
 // that @velane/integrations inside snippet code can reach the internal proxy.
-func (s *Scheduler) injectProxyEnv(env map[string]string, tenantID string) {
+//
+// It also mints the caller identity token the proxy uses for group-based
+// integration checks. The group list is exposed unsigned for introspection
+// only; the proxy trusts the signed token exclusively, so snippet code cannot
+// grant itself access by editing either value.
+func (s *Scheduler) injectProxyEnv(env map[string]string, tenantID string, caller models.CallerIdentity) {
 	if s.internalProxyURL != "" {
 		env["VELANE_PROXY_URL"] = s.internalProxyURL
 	}
 	env["VELANE_TENANT_ID"] = tenantID
+
+	caller.TenantID = tenantID
+	if len(caller.GroupIDs) > 0 {
+		env["VELANE_CALLER_GROUPS"] = strings.Join(caller.GroupIDs, ",")
+	}
+	if caller.UserID == "" && caller.Role == "" && len(caller.GroupIDs) == 0 {
+		// Nothing to attest — legacy tenant-wide invocation.
+		return
+	}
+	token, err := callerid.Sign(s.encKey, callerid.Claims{
+		TenantID: caller.TenantID,
+		UserID:   caller.UserID,
+		Role:     caller.Role,
+		GroupIDs: caller.GroupIDs,
+	}, callerid.DefaultTTL)
+	if err != nil {
+		return
+	}
+	env[callerid.EnvVar] = token
 }
 
 // SetObserver injects a post-invocation observer for observability pipelines.
@@ -276,7 +303,7 @@ func (s *Scheduler) Invoke(ctx context.Context, req InvokeRequest) (*models.Invo
 		return nil, fmt.Errorf("create invocation: %w", err)
 	}
 
-	s.injectProxyEnv(secrets, req.TenantID)
+	s.injectProxyEnv(secrets, req.TenantID, req.Caller)
 	result := s.executor.Run(ctx, executor.RunSpec{
 		Language:      string(snippet.Language),
 		Code:          version.Code,
@@ -340,7 +367,7 @@ func (s *Scheduler) InvokeAsync(ctx context.Context, req InvokeRequest, callback
 	if err != nil {
 		return nil, fmt.Errorf("fetch secrets: %w", err)
 	}
-	s.injectProxyEnv(secrets, req.TenantID)
+	s.injectProxyEnv(secrets, req.TenantID, req.Caller)
 
 	tenant, err := s.store.GetTenantByID(ctx, req.TenantID)
 	if err != nil {
@@ -445,7 +472,7 @@ func (s *Scheduler) InvokeQueued(ctx context.Context, req InvokeRequest) (*model
 
 	// Inject the internal proxy env so @velane/integrations works inside the
 	// snippet, matching the inline sync path.
-	s.injectProxyEnv(secrets, req.TenantID)
+	s.injectProxyEnv(secrets, req.TenantID, req.Caller)
 
 	var jobEgress *redisstore.EgressPolicyJob
 	if ep := tenant.EgressPolicy; len(ep.BlockedCIDRs) > 0 || len(ep.BlockedDomains) > 0 {
@@ -514,7 +541,7 @@ func (s *Scheduler) InvokeStream(ctx context.Context, req InvokeRequest) (<-chan
 	if err != nil {
 		return nil, nil, fmt.Errorf("create invocation: %w", err)
 	}
-	s.injectProxyEnv(secrets, req.TenantID)
+	s.injectProxyEnv(secrets, req.TenantID, req.Caller)
 
 	streamLibs, err := s.getLibraries(ctx, req.TenantID, tenant.Slug, string(snippet.Language))
 	if err != nil {

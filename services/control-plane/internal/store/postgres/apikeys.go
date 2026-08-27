@@ -29,8 +29,15 @@ func generateRawKey() (plain, prefix string, err error) {
 
 // CreateAPIKeyWithPlain generates a key, hashes it, persists the record, and
 // returns both the model and the one-time plain-text key. The plain key is
-// never stored — surface it to the caller immediately.
+// never stored — surface it to the caller immediately. The key is created
+// without an owning user, so it carries tenant-wide access.
 func (s *Store) CreateAPIKeyWithPlain(ctx context.Context, tenantID, name string, scopes []string) (*models.APIKey, string, error) {
+	return s.CreateAPIKeyWithPlainForUser(ctx, tenantID, name, scopes, nil)
+}
+
+// CreateAPIKeyWithPlainForUser creates an API key owned by userID. The key
+// inherits that user's group access when integrations are checked at runtime.
+func (s *Store) CreateAPIKeyWithPlainForUser(ctx context.Context, tenantID, name string, scopes []string, userID *string) (*models.APIKey, string, error) {
 	plain, prefix, err := generateRawKey()
 	if err != nil {
 		return nil, "", err
@@ -42,10 +49,10 @@ func (s *Store) CreateAPIKeyWithPlain(ctx context.Context, tenantID, name string
 	}
 
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO api_keys (id, tenant_id, key_hash, key_prefix, name, scopes)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 RETURNING id, tenant_id, key_hash, key_prefix, name, scopes, expires_at, last_used_at, created_at`,
-		ids.New(), tenantID, string(hash), prefix, name, scopes,
+		`INSERT INTO api_keys (id, tenant_id, key_hash, key_prefix, name, scopes, user_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING id, tenant_id, key_hash, key_prefix, name, scopes, user_id, expires_at, last_used_at, created_at`,
+		ids.New(), tenantID, string(hash), prefix, name, scopes, userID,
 	)
 
 	k, err := scanAPIKey(row)
@@ -65,7 +72,7 @@ func (s *Store) ValidateAPIKey(ctx context.Context, plain string) (*models.APIKe
 	prefix := plain[3:11]
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, tenant_id, key_hash, key_prefix, name, scopes, expires_at, last_used_at, created_at
+		`SELECT id, tenant_id, key_hash, key_prefix, name, scopes, user_id, expires_at, last_used_at, created_at
 		 FROM api_keys
 		 WHERE key_prefix = $1`,
 		prefix,
@@ -108,7 +115,7 @@ func (s *Store) ValidateAPIKey(ctx context.Context, plain string) (*models.APIKe
 // GetAPIKey retrieves a key record by its primary key.
 func (s *Store) GetAPIKey(ctx context.Context, id string) (*models.APIKey, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, key_hash, key_prefix, name, scopes, expires_at, last_used_at, created_at
+		`SELECT id, tenant_id, key_hash, key_prefix, name, scopes, user_id, expires_at, last_used_at, created_at
 		 FROM api_keys WHERE id = $1`,
 		id,
 	)
@@ -122,7 +129,7 @@ func (s *Store) GetAPIKey(ctx context.Context, id string) (*models.APIKey, error
 // ListAPIKeys returns all API keys for a given tenant.
 func (s *Store) ListAPIKeys(ctx context.Context, tenantID string) ([]*models.APIKey, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, tenant_id, key_hash, key_prefix, name, scopes, expires_at, last_used_at, created_at
+		`SELECT id, tenant_id, key_hash, key_prefix, name, scopes, user_id, expires_at, last_used_at, created_at
 		 FROM api_keys WHERE tenant_id = $1
 		 ORDER BY created_at DESC`,
 		tenantID,
@@ -176,7 +183,7 @@ func scanAPIKey(s scannable) (*models.APIKey, error) {
 	var k models.APIKey
 	if err := s.Scan(
 		&k.ID, &k.TenantID, &k.KeyHash, &k.KeyPrefix,
-		&k.Name, &k.Scopes, &k.ExpiresAt, &k.LastUsedAt, &k.CreatedAt,
+		&k.Name, &k.Scopes, &k.UserID, &k.ExpiresAt, &k.LastUsedAt, &k.CreatedAt,
 	); err != nil {
 		return nil, err
 	}

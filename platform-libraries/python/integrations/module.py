@@ -25,6 +25,9 @@ from urllib.request import Request, urlopen
 
 _PROXY_URL = os.environ.get("VELANE_PROXY_URL", "")
 _TENANT_ID = os.environ.get("VELANE_TENANT_ID", "")
+# Signed by the control plane; carries the invoking user's group access so the
+# proxy can enforce integration grants. Opaque and unforgeable from here.
+_CALLER_TOKEN = os.environ.get("VELANE_CALLER_TOKEN", "")
 
 
 class IntegrationClient:
@@ -47,6 +50,7 @@ class IntegrationClient:
             headers={
                 "Content-Type": "application/json",
                 "X-Velane-Tenant": _TENANT_ID,
+                **({"X-Velane-Caller": _CALLER_TOKEN} if _CALLER_TOKEN else {}),
                 **({"X-Velane-Integration-Alias": self._alias} if self._alias else {}),
             },
         )

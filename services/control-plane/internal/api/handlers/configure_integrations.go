@@ -67,9 +67,17 @@ func (h *ConfigureIntegrationsHandler) ListConfigured(w http.ResponseWriter, r *
 		connectedProfiles[strings.ToLower(conn.Provider)+"::"+strings.ToLower(conn.Alias)] = struct{}{}
 	}
 
+	access, ok := callerAccessOrError(w, r, h.store, tenant.ID)
+	if !ok {
+		return
+	}
+
 	filtered := make([]configuredProfileResponse, 0, len(configs))
 	for _, c := range configs {
 		if c == nil {
+			continue
+		}
+		if !access.CanUseProfile(c.ID) {
 			continue
 		}
 		key := strings.ToLower(c.Provider) + "::" + strings.ToLower(c.Alias)

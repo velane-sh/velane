@@ -48,6 +48,31 @@ export interface TenantMember {
   invited_at: string
 }
 
+export interface UserGroupMember {
+  group_id: string
+  user_id: string
+  email?: string
+  added_at: string
+}
+
+export interface IntegrationGroupGrant {
+  group_id: string
+  group_name?: string
+  credential_profile_id: string
+  granted_at: string
+}
+
+export interface UserGroup {
+  id: string
+  tenant_id: string
+  name: string
+  description: string
+  created_at: string
+  updated_at: string
+  members: UserGroupMember[] | null
+  integration_grants: IntegrationGroupGrant[] | null
+}
+
 export interface InviteToken {
   id: string
   tenant_id: string

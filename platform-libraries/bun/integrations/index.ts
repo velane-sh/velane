@@ -20,6 +20,9 @@
 
 const PROXY_URL = process.env.VELANE_PROXY_URL ?? ''
 const TENANT_ID = process.env.VELANE_TENANT_ID ?? ''
+// Signed by the control plane; carries the invoking user's group access so the
+// proxy can enforce integration grants. Opaque and unforgeable from here.
+const CALLER_TOKEN = process.env.VELANE_CALLER_TOKEN ?? ''
 
 export class IntegrationClient {
   constructor(
@@ -37,6 +40,7 @@ export class IntegrationClient {
       headers: {
         'Content-Type':    'application/json',
         'X-Velane-Tenant': TENANT_ID,
+        ...(CALLER_TOKEN ? { 'X-Velane-Caller': CALLER_TOKEN } : {}),
         ...(this.opts?.alias ? { 'X-Velane-Integration-Alias': this.opts.alias } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,

@@ -13,6 +13,7 @@ const dashboardRoutes: { path: string; title: string }[] = [
   { path: '/dashboard/data-store', title: 'Data Store' },
   { path: '/dashboard/settings/api-keys', title: 'API Keys' },
   { path: '/dashboard/settings/team', title: 'Team' },
+  { path: '/dashboard/settings/groups', title: 'User Groups' },
   { path: '/dashboard/settings/branding', title: 'Branding' },
   { path: '/dashboard/settings/egress', title: 'Egress Policy' },
   { path: '/dashboard/settings/embed', title: 'Embed' },

@@ -4,6 +4,7 @@ import clsx from 'clsx'
 const tabs = [
   { to: '/dashboard/settings/api-keys', label: 'API Keys' },
   { to: '/dashboard/settings/team', label: 'Team' },
+  { to: '/dashboard/settings/groups', label: 'User Groups' },
   { to: '/dashboard/settings/branding', label: 'Branding' },
   { to: '/dashboard/settings/egress', label: 'Egress Policy' },
   { to: '/dashboard/settings/embed', label: 'Embed' },
