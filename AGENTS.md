@@ -68,8 +68,10 @@ Embed tokens get a synthetic API key with scopes `["invoke", "manage"]` — they
 
 - API calls go through `src/lib/api.ts`. The `request()` function handles 401s automatically.
 - Tenant slug comes from `localStorage.getItem('tenantSlug')`.
-- Tailwind only — no CSS files, no inline `style=`. Monochrome palette (`gray-900` primary, `gray-50`/`gray-100` backgrounds).
-- Primary buttons: `rounded-lg bg-gray-900 text-white hover:bg-gray-800`.
+- Tokens live in `src/index.css` and are mapped in `tailwind.config.ts` using semantic `bg`/`surface`/`line`/`content`/`accent` colors.
+- Prefer the shared primitives in `src/components/` over ad-hoc Tailwind.
+- The default accent is indigo `#6366f1`, overridable per tenant via `Branding.accent_color`.
+- Tailwind only — no CSS files, no inline `style=` attributes.
 - Do not add `console.log` statements.
 - Type-check before reporting done: `npx tsc --noEmit`.
 
