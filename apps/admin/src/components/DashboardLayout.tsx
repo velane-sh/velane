@@ -212,7 +212,7 @@ export default function DashboardLayout() {
                 <button
                   type="button"
                   onClick={() => setShowOrgSwitcher(open => !open)}
-                  className="flex w-full items-center justify-between rounded-lg border border-line-strong bg-surface-muted px-3 py-2 text-left hover:border-line-strong hover:bg-surface"
+                  className="flex w-full items-center justify-between rounded-lg border border-line bg-surface-muted px-3 py-2 text-left hover:border-line-strong hover:bg-surface"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-content">{currentOrg.name}</p>
@@ -265,7 +265,7 @@ export default function DashboardLayout() {
           </div>
         ) : orgsError ? (
           <div className="flex h-full items-center justify-center">
-            <div className="w-full max-w-md rounded-xl border border-danger-subtle bg-surface p-6 shadow-sm">
+            <div className="w-full max-w-md rounded-xl border border-danger-border bg-surface p-6 shadow-sm">
               <p className="text-sm font-medium text-danger-text">{orgsError}</p>
               <p className="mt-2 text-sm text-content-muted">
                 Refresh the page after your session is restored to continue.
@@ -282,7 +282,7 @@ export default function DashboardLayout() {
 
         {shouldShowCreateOrgModal && (
           <>
-            <div className="pointer-events-none absolute inset-0 bg-bg backdrop-blur-sm" />
+            <div className="pointer-events-none absolute inset-0 bg-scrim backdrop-blur-sm" />
             <div className="absolute inset-0 flex items-center justify-center p-6">
               <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-overlay">
                 <h2 className="text-xl font-semibold text-content">Create your first org</h2>
@@ -302,7 +302,7 @@ export default function DashboardLayout() {
                       value={orgName}
                       onChange={(e) => handleOrgNameChange(e.target.value)}
                       required
-                      className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
+                      className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring"
                       placeholder="Acme"
                     />
                   </div>
@@ -317,7 +317,7 @@ export default function DashboardLayout() {
                         setOrgSlug(slugifyOrgName(e.target.value))
                       }}
                       required
-                      className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
+                      className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring"
                       placeholder="acme"
                     />
                     <p className="mt-1 text-xs text-content-subtle">

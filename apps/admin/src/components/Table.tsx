@@ -1,4 +1,4 @@
-import type { HTMLAttributes, TableHTMLAttributes, ThHTMLAttributes, TdHTMLAttributes } from 'react'
+import type { HTMLAttributes, ThHTMLAttributes, TdHTMLAttributes } from 'react'
 import { cn } from '../lib/cn'
 
 export function Table({
@@ -41,5 +41,3 @@ export function TR({
 export function TD({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
   return <td className={cn('px-6 py-4', className)} {...props} />
 }
-
-export type { TableHTMLAttributes }

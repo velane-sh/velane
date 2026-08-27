@@ -10,6 +10,7 @@ export default {
           DEFAULT: 'var(--color-surface)',
           muted: 'var(--color-surface-muted)',
         },
+        scrim: 'var(--color-scrim)',
         line: {
           DEFAULT: 'var(--color-border)',
           strong: 'var(--color-border-strong)',
@@ -24,16 +25,20 @@ export default {
           hover: 'var(--color-accent-hover)',
           fg: 'var(--color-accent-fg)',
           subtle: 'var(--color-accent-subtle)',
+          border: 'var(--color-accent-border)',
+          ring: 'var(--color-accent-ring)',
         },
         danger: {
           DEFAULT: 'var(--color-danger)',
           subtle: 'var(--color-danger-subtle)',
           text: 'var(--color-danger-text)',
+          border: 'var(--color-danger-border)',
         },
         success: {
           DEFAULT: 'var(--color-success)',
           subtle: 'var(--color-success-subtle)',
           text: 'var(--color-success-text)',
+          border: 'var(--color-success-border)',
         },
       },
       borderRadius: {

@@ -14,9 +14,9 @@ export default function Badge({
         'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
         {
           'border-line bg-surface-muted text-content-muted': variant === 'neutral',
-          'border-accent/20 bg-accent-subtle text-accent': variant === 'accent',
-          'border-success/20 bg-success-subtle text-success-text': variant === 'success',
-          'border-danger/20 bg-danger-subtle text-danger-text': variant === 'danger',
+          'border-accent-border bg-accent-subtle text-accent': variant === 'accent',
+          'border-success-border bg-success-subtle text-success-text': variant === 'success',
+          'border-danger-border bg-danger-subtle text-danger-text': variant === 'danger',
           'border-amber-200 bg-amber-50 text-amber-700': variant === 'warning',
         },
         className,

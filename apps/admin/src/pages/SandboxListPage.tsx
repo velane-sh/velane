@@ -111,7 +111,7 @@ export default function SandboxListPage() {
             <div className="flex w-full gap-2 sm:w-auto">
               <div className="relative min-w-0 flex-1 sm:w-60">
                 <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-subtle" />
-                <input value={query} onChange={event => setQuery(event.target.value)} aria-label="Search sandboxes" placeholder="Search sandboxes" className="h-9 w-full rounded-lg border border-line-strong bg-surface pl-9 pr-3 text-sm text-content outline-none focus:border-accent focus:ring-2 focus:ring-accent" />
+                <input value={query} onChange={event => setQuery(event.target.value)} aria-label="Search sandboxes" placeholder="Search sandboxes" className="h-9 w-full rounded-lg border border-line-strong bg-surface pl-9 pr-3 text-sm text-content outline-none focus:border-accent focus:ring-2 focus:ring-accent-ring" />
               </div>
               <Select aria-label="Filter sandbox status" value={status} onChange={event => setStatus(event.target.value)} containerClassName="w-40">
                 <option value="">All statuses</option>
@@ -132,30 +132,30 @@ export default function SandboxListPage() {
           </div>
         ) : (
           <Table className="rounded-none border-0 shadow-none" minWidthClassName="min-w-[700px]">
-              <THead>
-                <TR className="hover:bg-transparent">
-                  <TH className="px-5 py-3">Name</TH>
-                  <TH className="px-4 py-3">Status</TH>
-                  <TH className="px-4 py-3">Pinned configuration</TH>
-                  <TH className="px-5 py-3">Last activity</TH>
+            <THead>
+              <TR className="hover:bg-transparent">
+                <TH className="px-5 py-3">Name</TH>
+                <TH className="px-4 py-3">Status</TH>
+                <TH className="px-4 py-3">Pinned configuration</TH>
+                <TH className="px-5 py-3">Last activity</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {filteredSandboxes.map(sandbox => (
+                <TR key={sandbox.id}>
+                  <TD className="px-5 py-3">
+                    <Link className="font-medium text-content hover:underline" to={`/dashboard/sandboxes/${sandbox.id}`}>{sandbox.name}</Link>
+                    <code className="mt-1 block text-xs text-content-muted">{sandbox.id}</code>
+                  </TD>
+                  <TD className="px-4 py-3"><SandboxStatusBadge state={sandbox.observed_state} /></TD>
+                  <TD className="px-4 py-3">
+                    <p className="font-mono text-xs text-content">Recipe {sandbox.recipe_version_id}</p>
+                    <p className="mt-1 font-mono text-xs text-content-muted">Profile {sandbox.profile_version_id}</p>
+                  </TD>
+                  <TD className="px-5 py-3 text-content-muted">{new Date(sandbox.updated_at).toLocaleString()}</TD>
                 </TR>
-              </THead>
-              <TBody>
-                {filteredSandboxes.map(sandbox => (
-                  <TR key={sandbox.id}>
-                    <TD className="px-5 py-3">
-                      <Link className="font-medium text-content hover:underline" to={`/dashboard/sandboxes/${sandbox.id}`}>{sandbox.name}</Link>
-                      <code className="mt-1 block text-xs text-content-muted">{sandbox.id}</code>
-                    </TD>
-                    <TD className="px-4 py-3"><SandboxStatusBadge state={sandbox.observed_state} /></TD>
-                    <TD className="px-4 py-3">
-                      <p className="font-mono text-xs text-content">Recipe {sandbox.recipe_version_id}</p>
-                      <p className="mt-1 font-mono text-xs text-content-muted">Profile {sandbox.profile_version_id}</p>
-                    </TD>
-                    <TD className="px-5 py-3 text-content-muted">{new Date(sandbox.updated_at).toLocaleString()}</TD>
-                  </TR>
-                ))}
-              </TBody>
+              ))}
+            </TBody>
           </Table>
         )}
       </Card>

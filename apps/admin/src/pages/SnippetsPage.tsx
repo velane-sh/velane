@@ -82,7 +82,7 @@ export default function SnippetsPage() {
       />
 
       {error && (
-        <div className="mb-6 flex items-center gap-2.5 rounded-lg border border-danger-subtle bg-danger-subtle px-4 py-3 text-sm text-danger-text">
+        <div className="mb-6 flex items-center gap-2.5 rounded-lg border border-danger-border bg-danger-subtle px-4 py-3 text-sm text-danger-text">
           <AlertCircle size={16} className="shrink-0" />
           {error}
         </div>
@@ -113,44 +113,44 @@ export default function SnippetsPage() {
 
       {snippets.length > 0 && (
         <Table className="shadow-sm">
-            <THead>
-              <TR className="hover:bg-transparent">
-                <TH>Name</TH>
-                <TH>Language</TH>
-                <TH>Slug</TH>
-                <TH>Created</TH>
-                <TH></TH>
+          <THead>
+            <TR className="hover:bg-transparent">
+              <TH>Name</TH>
+              <TH>Language</TH>
+              <TH>Slug</TH>
+              <TH>Created</TH>
+              <TH></TH>
+            </TR>
+          </THead>
+          <TBody>
+            {snippets.map((sn) => (
+              <TR
+                key={sn.id}
+                interactive
+                onClick={() => navigate(`/dashboard/snippets/${sn.id}`)}
+              >
+                <TD className="font-medium text-content">{sn.name}</TD>
+                <TD>
+                  <LanguageBadge language={sn.language} />
+                </TD>
+                <TD className="font-mono text-xs text-content-muted">{sn.slug}</TD>
+                <TD className="text-content-muted">
+                  {new Date(sn.created_at).toLocaleDateString()}
+                </TD>
+                <TD className="text-right">
+                  <Button
+                    variant="danger"
+                    size="icon"
+                    className="rounded p-1"
+                    onClick={(e) => handleDelete(e, sn.id)}
+                    title="Delete workflow"
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </TD>
               </TR>
-            </THead>
-            <TBody>
-              {snippets.map((sn) => (
-                <TR
-                  key={sn.id}
-                  interactive
-                  onClick={() => navigate(`/dashboard/snippets/${sn.id}`)}
-                >
-                  <TD className="font-medium text-content">{sn.name}</TD>
-                  <TD>
-                    <LanguageBadge language={sn.language} />
-                  </TD>
-                  <TD className="font-mono text-xs text-content-muted">{sn.slug}</TD>
-                  <TD className="text-content-muted">
-                    {new Date(sn.created_at).toLocaleDateString()}
-                  </TD>
-                  <TD className="text-right">
-                    <Button
-                      variant="danger"
-                      size="icon"
-                      className="rounded p-1"
-                      onClick={(e) => handleDelete(e, sn.id)}
-                      title="Delete workflow"
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </TD>
-                </TR>
-              ))}
-            </TBody>
+            ))}
+          </TBody>
         </Table>
       )}
 
@@ -167,40 +167,40 @@ export default function SnippetsPage() {
           </>
         )}
       >
-            <div className="mb-4">
-              <label className="mb-1 block text-sm font-medium text-content">Name</label>
-              <input
-                className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="My Workflow"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                autoFocus
-              />
-            </div>
+        <div className="mb-4">
+          <label className="mb-1 block text-sm font-medium text-content">Name</label>
+          <input
+            className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring"
+            placeholder="My Workflow"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            autoFocus
+          />
+        </div>
 
-            <div className="mb-4">
-              <label className="mb-1 block text-sm font-medium text-content">Language</label>
-              <select
-                className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
-                value={newLanguage}
-                onChange={(e) => setNewLanguage(e.target.value as 'bun' | 'python')}
-              >
-                <option value="bun">Bun (TypeScript)</option>
-                <option value="python">Python</option>
-              </select>
-            </div>
+        <div className="mb-4">
+          <label className="mb-1 block text-sm font-medium text-content">Language</label>
+          <select
+            className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring"
+            value={newLanguage}
+            onChange={(e) => setNewLanguage(e.target.value as 'bun' | 'python')}
+          >
+            <option value="bun">Bun (TypeScript)</option>
+            <option value="python">Python</option>
+          </select>
+        </div>
 
-            <div className="mb-6">
-              <label className="mb-1 block text-sm font-medium text-content">
-                Description <span className="font-normal text-content-subtle">(optional)</span>
-              </label>
-              <input
-                className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="What does this workflow do?"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-              />
-            </div>
+        <div className="mb-6">
+          <label className="mb-1 block text-sm font-medium text-content">
+            Description <span className="font-normal text-content-subtle">(optional)</span>
+          </label>
+          <input
+            className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring"
+            placeholder="What does this workflow do?"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+          />
+        </div>
       </Modal>
     </div>
   )

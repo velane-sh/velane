@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { X } from 'lucide-react'
 import { cn } from '../lib/cn'
 
 interface ModalProps {
@@ -40,10 +41,10 @@ export default function Modal({
           <button
             type="button"
             aria-label="Close"
-            className="text-xl leading-none text-content-muted hover:text-content"
+            className="text-content-muted hover:text-content"
             onClick={onClose}
           >
-            ×
+            <X size={16} />
           </button>
         </div>
         {children}
