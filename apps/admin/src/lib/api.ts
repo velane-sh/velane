@@ -3,6 +3,8 @@ import type {
   OrgMembership,
   Branding,
   TenantMember,
+  UserGroup,
+  IntegrationGroupGrant,
   InviteToken,
   UsageSummary,
   APIKey,
@@ -461,6 +463,49 @@ export const api = {
 
   async listInvites(): Promise<InviteToken[]> {
     return request('GET', '/v1/tenant/members/invites', undefined, 'apikey')
+  },
+
+  // User groups
+  async listUserGroups(): Promise<UserGroup[]> {
+    return request('GET', '/v1/tenant/groups', undefined, 'apikey')
+  },
+
+  async createUserGroup(name: string, description: string): Promise<UserGroup> {
+    return request('POST', '/v1/tenant/groups', { name, description }, 'apikey')
+  },
+
+  async deleteUserGroup(groupID: string): Promise<void> {
+    return request('DELETE', `/v1/tenant/groups/${groupID}`, undefined, 'apikey')
+  },
+
+  async addUserGroupMember(groupID: string, userID: string): Promise<void> {
+    return request('POST', `/v1/tenant/groups/${groupID}/members`, { user_id: userID }, 'apikey')
+  },
+
+  async removeUserGroupMember(groupID: string, userID: string): Promise<void> {
+    return request('DELETE', `/v1/tenant/groups/${groupID}/members`, { user_id: userID }, 'apikey')
+  },
+
+  async grantIntegrationToGroup(groupID: string, credentialProfileID: string): Promise<void> {
+    return request(
+      'POST',
+      `/v1/tenant/groups/${groupID}/integrations`,
+      { credential_profile_id: credentialProfileID },
+      'apikey',
+    )
+  },
+
+  async revokeIntegrationFromGroup(groupID: string, credentialProfileID: string): Promise<void> {
+    return request(
+      'DELETE',
+      `/v1/tenant/groups/${groupID}/integrations`,
+      { credential_profile_id: credentialProfileID },
+      'apikey',
+    )
+  },
+
+  async listIntegrationGrants(credentialProfileID: string): Promise<IntegrationGroupGrant[]> {
+    return request('GET', `/v1/integrations/configured/${credentialProfileID}/groups`, undefined, 'apikey')
   },
 
   // Usage

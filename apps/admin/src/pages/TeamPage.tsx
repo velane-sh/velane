@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import type { TenantMember, InviteToken } from '../types'
 import CopyBox from '../components/CopyBox'
 
-const ROLES = ['invoke', 'manage', 'admin']
+const ROLES = ['owner', 'admin', 'integration_manager', 'manage', 'member', 'invoke', 'viewer']
 
 export default function TeamPage() {
   const [members, setMembers] = useState<TenantMember[]>([])

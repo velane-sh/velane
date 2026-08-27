@@ -9,7 +9,8 @@ type APIKey struct {
 	KeyHash    string     `json:"-"`          // bcrypt hash — never serialised
 	KeyPrefix  string     `json:"key_prefix"` // first 8 chars after "vl_" prefix
 	Name       string     `json:"name"`
-	Scopes     []string   `json:"scopes"` // "invoke", "manage", "admin"
+	Scopes     []string   `json:"scopes"`            // "invoke", "manage", "admin"
+	UserID     *string    `json:"user_id,omitempty"` // creating user; nil = legacy tenant-wide key
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`

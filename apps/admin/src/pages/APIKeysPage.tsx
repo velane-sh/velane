@@ -113,6 +113,9 @@ export default function APIKeysPage() {
                 </label>
               ))}
             </div>
+            <p className="mt-1 text-xs text-gray-500">
+              The key inherits your user groups, so it can only use integrations granted to them.
+            </p>
           </div>
           <button
             type="submit"

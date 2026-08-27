@@ -138,20 +138,58 @@ func RequireScope(scope string, log *zap.Logger) func(http.Handler) http.Handler
 	}
 }
 
-// roleHasScope maps a tenant member role to the scopes it grants.
-// admin → invoke + manage + admin
-// manage → invoke + manage
-// invoke → invoke only
-func roleHasScope(role, scope string) bool {
-	switch role {
-	case "admin":
-		return true
-	case "manage":
-		return scope == "invoke" || scope == "manage"
-	case "invoke":
-		return scope == "invoke"
+// RequireRole returns a middleware that restricts a route to the given tenant
+// member roles. API keys are matched against the equivalent scope-derived role
+// so that admin-scoped keys keep working on admin-only routes.
+func RequireRole(log *zap.Logger, roles ...string) func(http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(roles))
+	for _, role := range roles {
+		allowed[role] = true
 	}
-	return false
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			role := CallerRole(r.Context())
+			if role == "" {
+				writeUnauthorized(w, "missing or malformed Authorization header")
+				return
+			}
+			if !allowed[role] {
+				http.Error(w, `{"error":"forbidden: insufficient role"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CallerRole reports the effective tenant role of the request, whether it was
+// authenticated with a session JWT or an API key. API keys have scopes rather
+// than roles, so their broadest scope is mapped back onto a role.
+func CallerRole(ctx context.Context) string {
+	if role := SessionRoleFromContext(ctx); role != "" {
+		return role
+	}
+	if key := APIKeyFromContext(ctx); key != nil {
+		switch {
+		case key.HasScope(models.RoleAdmin):
+			return models.RoleAdmin
+		case key.HasScope(models.RoleManage):
+			return models.RoleManage
+		case key.HasScope(models.RoleInvoke):
+			return models.RoleInvoke
+		}
+	}
+	return ""
+}
+
+// roleHasScope maps a tenant member role to the scopes it grants.
+// owner, admin          → invoke + manage + admin
+// integration_manager   → invoke + manage
+// manage                → invoke + manage
+// member, invoke        → invoke only
+// viewer                → read-only, no scope
+func roleHasScope(role, scope string) bool {
+	return models.RoleGrantsScope(role, scope)
 }
 
 // bearerToken extracts the token from "Authorization: Bearer <token>".

@@ -8,6 +8,7 @@ import SettingsLayout from './components/SettingsLayout'
 import OverviewPage from './pages/OverviewPage'
 import APIKeysPage from './pages/APIKeysPage'
 import TeamPage from './pages/TeamPage'
+import UserGroupsPage from './pages/UserGroupsPage'
 import BrandingPage from './pages/BrandingPage'
 import EgressPage from './pages/EgressPage'
 import SnippetsPage from './pages/SnippetsPage'
@@ -78,6 +79,7 @@ function AppRoutes() {
           <Route index element={<Navigate to="api-keys" replace />} />
           <Route path="api-keys" element={<APIKeysPage />} />
           <Route path="team" element={<TeamPage />} />
+          <Route path="groups" element={<UserGroupsPage />} />
           <Route path="branding" element={<BrandingPage />} />
           <Route path="egress" element={<EgressPage />} />
           <Route path="embed" element={<EmbedPage />} />

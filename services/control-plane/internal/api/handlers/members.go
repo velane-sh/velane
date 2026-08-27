@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/abskrj/velane/services/control-plane/internal/api/middleware"
@@ -85,10 +86,8 @@ func (h *MembersHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 	if req.Role == "" {
 		req.Role = "manage"
 	}
-	switch req.Role {
-	case "invoke", "manage", "admin":
-	default:
-		writeError(w, http.StatusBadRequest, "role must be one of: invoke, manage, admin")
+	if !models.IsValidRole(req.Role) {
+		writeError(w, http.StatusBadRequest, "role must be one of: "+strings.Join(models.ValidRoles, ", "))
 		return
 	}
 

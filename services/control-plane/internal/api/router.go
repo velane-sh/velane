@@ -12,6 +12,7 @@ import (
 	"github.com/abskrj/velane/services/control-plane/internal/auth/oauth"
 	"github.com/abskrj/velane/services/control-plane/internal/hub"
 	"github.com/abskrj/velane/services/control-plane/internal/license"
+	"github.com/abskrj/velane/services/control-plane/internal/models"
 	"github.com/abskrj/velane/services/control-plane/internal/nango"
 	"github.com/abskrj/velane/services/control-plane/internal/platformlibs"
 	"github.com/abskrj/velane/services/control-plane/internal/sandboxcontrol"
@@ -71,7 +72,7 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	metricsH := handlers.NewMetricsHandler(store, log)
 	replayH := handlers.NewReplayHandler(store, sched, log)
 	embedH := handlers.NewEmbedHandler(store, log)
-	connectionsH := handlers.NewConnectionsHandler(store, nangoClient, log, nangoConnectURL, nangoApiURL).WithAuditor(auditor)
+	connectionsH := handlers.NewConnectionsHandler(store, nangoClient, log, nangoConnectURL, nangoApiURL).WithAuditor(auditor).WithCallerKey(encKey)
 	integrationsH := handlers.NewIntegrationsHandler(nangoClient, log, nangoInternalURL, nangoApiURL, mcpPublicURL)
 	configureIntH := handlers.NewConfigureIntegrationsHandler(store, nangoClient, log, encKey)
 	triggersH := handlers.NewWorkflowTriggersHandler(store, nangoClient, log)
@@ -81,6 +82,7 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 	}
 	brandingH := handlers.NewBrandingHandler(store, log).WithAuditor(auditor)
 	membersH := handlers.NewMembersHandler(store, log).WithAuditor(auditor)
+	userGroupsH := handlers.NewUserGroupsHandler(store, log).WithAuditor(auditor)
 	usageH := handlers.NewUsageHandler(store, log)
 	apikeysH := handlers.NewAPIKeysHandler(store, log).WithAuditor(auditor)
 	auditH := handlers.NewAuditHandler(store, log)
@@ -214,6 +216,27 @@ func newRouter(store *postgres.Store, sched *scheduler.Scheduler, log *zap.Logge
 			Delete("/v1/tenant/members/{userID}", membersH.RemoveMember)
 		r.With(middleware.RequireScope("admin", log)).
 			Get("/v1/tenant/members/invites", membersH.ListInvites)
+
+		// User groups. Membership is an admin/owner concern; granting an
+		// integration to a group is additionally open to integration managers.
+		adminOrOwner := middleware.RequireRole(log, models.RoleAdmin, models.RoleOwner)
+		integrationGranters := middleware.RequireRole(log, models.RoleAdmin, models.RoleOwner, models.RoleIntegrationManager)
+		r.With(middleware.RequireScope("manage", log), integrationGranters).
+			Get("/v1/tenant/groups", userGroupsH.ListGroups)
+		r.With(middleware.RequireScope("admin", log), adminOrOwner).
+			Post("/v1/tenant/groups", userGroupsH.CreateGroup)
+		r.With(middleware.RequireScope("admin", log), adminOrOwner).
+			Delete("/v1/tenant/groups/{groupID}", userGroupsH.DeleteGroup)
+		r.With(middleware.RequireScope("admin", log), adminOrOwner).
+			Post("/v1/tenant/groups/{groupID}/members", userGroupsH.AddMember)
+		r.With(middleware.RequireScope("admin", log), adminOrOwner).
+			Delete("/v1/tenant/groups/{groupID}/members", userGroupsH.RemoveMember)
+		r.With(middleware.RequireScope("manage", log), integrationGranters).
+			Post("/v1/tenant/groups/{groupID}/integrations", userGroupsH.GrantIntegration)
+		r.With(middleware.RequireScope("manage", log), integrationGranters).
+			Delete("/v1/tenant/groups/{groupID}/integrations", userGroupsH.RevokeIntegration)
+		r.With(middleware.RequireScope("manage", log), integrationGranters).
+			Get("/v1/integrations/configured/{profileID}/groups", userGroupsH.ListIntegrationGrants)
 
 		// Plan / billing (cloud mode only — returns free plan when VELANE_CLOUD is not set).
 		r.Get("/v1/tenant/plan", billingH.GetPlan)

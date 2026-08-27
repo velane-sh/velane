@@ -78,6 +78,7 @@ func (h *InvocationsHandler) InvokeByToken(w http.ResponseWriter, r *http.Reques
 	}
 
 	var tenant *models.Tenant
+	var caller models.CallerIdentity
 
 	// Try session JWT auth when an auth provider is configured.
 	if h.provider != nil {
@@ -88,7 +89,7 @@ func (h *InvocationsHandler) InvokeByToken(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			activeMembership := memberships[0]
-			if role := activeMembership.Role; role != "invoke" && role != "manage" && role != "admin" {
+			if !models.RoleGrantsScope(activeMembership.Role, models.RoleInvoke) {
 				writeError(w, http.StatusForbidden, "insufficient role for invoke")
 				return
 			}
@@ -98,6 +99,7 @@ func (h *InvocationsHandler) InvokeByToken(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			tenant = t
+			caller = models.CallerIdentity{TenantID: t.ID, UserID: user.ID, Role: activeMembership.Role}
 			goto authOKByToken
 		}
 	}
@@ -121,9 +123,25 @@ func (h *InvocationsHandler) InvokeByToken(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		tenant = t
+		caller = models.CallerIdentity{TenantID: t.ID, Role: apiKeyRole(key)}
+		if key.UserID != nil {
+			caller.UserID = *key.UserID
+		}
 	}
 
 authOKByToken:
+
+	// Resolve the caller's groups once; the scheduler signs them into the
+	// sandbox so the proxy can enforce integration grants at runtime.
+	if caller.UserID != "" {
+		groupIDs, err := h.store.ListGroupIDsForUser(r.Context(), tenant.ID, caller.UserID)
+		if err != nil {
+			h.log.Error("invoke: resolve caller groups", zap.Error(err))
+			writeError(w, http.StatusInternalServerError, "failed to resolve caller groups")
+			return
+		}
+		caller.GroupIDs = groupIDs
+	}
 
 	// --- Read the input payload ---
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -175,6 +193,7 @@ authOKByToken:
 		Env:           env,
 		Input:         inputPayload,
 		PinnedVersion: pinnedVersion,
+		Caller:        caller,
 	}
 
 	// --- Invoke mode ---

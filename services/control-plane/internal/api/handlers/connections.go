@@ -8,6 +8,7 @@ import (
 
 	"github.com/abskrj/velane/services/control-plane/internal/api/middleware"
 	"github.com/abskrj/velane/services/control-plane/internal/audit"
+	"github.com/abskrj/velane/services/control-plane/internal/callerid"
 	"github.com/abskrj/velane/services/control-plane/internal/models"
 	"github.com/abskrj/velane/services/control-plane/internal/nango"
 	"github.com/abskrj/velane/services/control-plane/internal/store/postgres"
@@ -32,6 +33,7 @@ type ConnectionsHandler struct {
 	nango           *nango.Client
 	log             *zap.Logger
 	auditor         *audit.Logger
+	callerKey       []byte // verifies signed caller identity tokens at the proxy
 	nangoConnectURL string // browser-accessible Connect UI URL, returned with session tokens
 	nangoApiURL     string // browser-accessible Nango API URL, returned with session tokens
 }
@@ -42,6 +44,14 @@ func NewConnectionsHandler(store *postgres.Store, nangoClient *nango.Client, log
 
 func (h *ConnectionsHandler) WithAuditor(a *audit.Logger) *ConnectionsHandler {
 	h.auditor = a
+	return h
+}
+
+// WithCallerKey installs the key used to verify the caller identity tokens the
+// scheduler mints. Without it the proxy cannot identify callers and keeps the
+// pre-RBAC behaviour for unrestricted profiles.
+func (h *ConnectionsHandler) WithCallerKey(key []byte) *ConnectionsHandler {
+	h.callerKey = append([]byte(nil), key...)
 	return h
 }
 
@@ -222,7 +232,13 @@ func (h *ConnectionsHandler) ListConnections(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if conns == nil {
+	access, ok := callerAccessOrError(w, r, h.store, tenant.ID)
+	if !ok {
+		return
+	}
+	conns = filterConnectionsByAccess(conns, access)
+
+	if len(conns) == 0 {
 		writeJSON(w, http.StatusOK, []any{})
 		return
 	}
@@ -289,11 +305,36 @@ func (h *ConnectionsHandler) ListConnectionsForToken(w http.ResponseWriter, r *h
 		return
 	}
 
-	if conns == nil {
+	access, ok := callerAccessOrError(w, r, h.store, tenant.ID)
+	if !ok {
+		return
+	}
+	conns = filterConnectionsByAccess(conns, access)
+
+	if len(conns) == 0 {
 		writeJSON(w, http.StatusOK, []any{})
 		return
 	}
 	writeJSON(w, http.StatusOK, filterAndPaginateConnections(conns, r))
+}
+
+// filterConnectionsByAccess drops connections whose credential profile is
+// restricted to groups the caller does not belong to.
+func filterConnectionsByAccess(conns []*models.Connection, access *CallerAccess) []*models.Connection {
+	if access == nil || access.SeesAll {
+		return conns
+	}
+	visible := make([]*models.Connection, 0, len(conns))
+	for _, c := range conns {
+		profileID := ""
+		if c.CredentialProfileID != nil {
+			profileID = *c.CredentialProfileID
+		}
+		if access.CanUseProfile(profileID) {
+			visible = append(visible, c)
+		}
+	}
+	return visible
 }
 
 func filterAndPaginateConnections(conns []*models.Connection, r *http.Request) []*models.Connection {
@@ -333,6 +374,10 @@ func filterAndPaginateConnections(conns []*models.Connection, r *http.Request) [
 // and trusts the X-Velane-Tenant header. It is externally reachable in shipped
 // topologies, so callers that reach this port can name any tenant. Moving
 // trust-header routes to a second, never-published listener is tracked separately.
+//
+// Group membership, unlike the tenant header, is never taken on trust: it comes
+// from the signed caller token the scheduler injects into the sandbox, so a
+// snippet cannot widen its own integration access.
 func (h *ConnectionsHandler) Proxy(w http.ResponseWriter, r *http.Request) {
 	tenantID := strings.TrimSpace(r.Header.Get("X-Velane-Tenant"))
 	if tenantID == "" {
@@ -364,5 +409,75 @@ func (h *ConnectionsHandler) Proxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "connection is not fully linked; reconnect provider")
 		return
 	}
+	if !h.callerMayUseConnection(r, tenantID, conn) {
+		writeError(w, http.StatusForbidden, "integration not granted to caller's groups")
+		return
+	}
 	h.nango.Proxy(w, r, conn.NangoConnectionID, providerConfigKey, path)
+}
+
+// callerMayUseConnection verifies the signed caller token against the group
+// grants on the connection's credential profile. A missing or unverifiable
+// token keeps the pre-RBAC behaviour unless the tenant enabled strict mode.
+func (h *ConnectionsHandler) callerMayUseConnection(r *http.Request, tenantID string, conn *models.Connection) bool {
+	profileID := ""
+	if conn.CredentialProfileID != nil {
+		profileID = *conn.CredentialProfileID
+	}
+
+	restricted := false
+	if profileID != "" {
+		var err error
+		restricted, err = h.store.CredentialProfileHasGrants(r.Context(), profileID)
+		if err != nil {
+			h.log.Error("proxy: check credential profile grants", zap.Error(err))
+			return false
+		}
+	}
+
+	claims := h.verifiedCallerClaims(r, tenantID)
+	if claims == nil {
+		if !restricted {
+			return true
+		}
+		strict, err := h.store.TenantRBACStrictMode(r.Context(), tenantID)
+		if err != nil {
+			h.log.Error("proxy: read tenant strict mode", zap.Error(err))
+			return false
+		}
+		return !strict
+	}
+
+	if models.RoleSeesAllIntegrations(claims.Role) || !restricted {
+		return true
+	}
+
+	granted, err := h.store.CredentialProfileGrantedToGroups(r.Context(), profileID, claims.GroupIDs)
+	if err != nil {
+		h.log.Error("proxy: check group grant", zap.Error(err))
+		return false
+	}
+	return granted
+}
+
+// verifiedCallerClaims returns the caller identity only when the token is
+// present, correctly signed and issued for this tenant.
+func (h *ConnectionsHandler) verifiedCallerClaims(r *http.Request, tenantID string) *callerid.Claims {
+	token := strings.TrimSpace(r.Header.Get(callerid.Header))
+	if token == "" || len(h.callerKey) == 0 {
+		return nil
+	}
+	claims, err := callerid.Verify(h.callerKey, token)
+	if err != nil {
+		h.log.Warn("proxy: rejecting unverifiable caller token", zap.Error(err))
+		return nil
+	}
+	if claims.TenantID != tenantID {
+		h.log.Warn("proxy: caller token tenant mismatch",
+			zap.String("token_tenant", claims.TenantID),
+			zap.String("header_tenant", tenantID),
+		)
+		return nil
+	}
+	return claims
 }

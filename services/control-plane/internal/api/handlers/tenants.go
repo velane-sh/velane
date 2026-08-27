@@ -98,7 +98,14 @@ func (h *TenantsHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		req.Scopes = []string{"invoke"}
 	}
 
-	key, plain, err := h.store.CreateAPIKeyWithPlain(r.Context(), tenant.ID, req.Name, req.Scopes)
+	// A key created by a signed-in user inherits that user's group access; keys
+	// created with an API key stay tenant-wide as before.
+	var ownerID *string
+	if user := middleware.SessionUserFromContext(r.Context()); user != nil {
+		ownerID = &user.ID
+	}
+
+	key, plain, err := h.store.CreateAPIKeyWithPlainForUser(r.Context(), tenant.ID, req.Name, req.Scopes, ownerID)
 	if err != nil {
 		h.log.Error("create api key failed", zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "failed to create api key")
