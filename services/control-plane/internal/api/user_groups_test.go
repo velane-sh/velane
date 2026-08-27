@@ -237,10 +237,10 @@ func TestProxy_EnforcesGroupGrants(t *testing.T) {
 		return token
 	}
 
-	if code := proxy(sign(callerid.Claims{Role: models.RoleMember, GroupIDs: []string{groupID}})); code != http.StatusOK {
+	if code := proxy(sign(callerid.Claims{UserID: "user-1", Role: models.RoleMember, GroupIDs: []string{groupID}})); code != http.StatusOK {
 		t.Errorf("granted member proxy status = %d; want 200", code)
 	}
-	if code := proxy(sign(callerid.Claims{Role: models.RoleMember, GroupIDs: []string{"unrelated"}})); code != http.StatusForbidden {
+	if code := proxy(sign(callerid.Claims{UserID: "user-2", Role: models.RoleMember, GroupIDs: []string{"unrelated"}})); code != http.StatusForbidden {
 		t.Errorf("ungranted member proxy status = %d; want 403", code)
 	}
 	if code := proxy(sign(callerid.Claims{Role: models.RoleAdmin})); code != http.StatusOK {
@@ -255,6 +255,9 @@ func TestProxy_EnforcesGroupGrants(t *testing.T) {
 	if code := proxy(""); code != http.StatusOK {
 		t.Errorf("tokenless proxy status = %d; want 200", code)
 	}
+	if code := proxy(sign(callerid.Claims{Role: models.RoleInvoke})); code != http.StatusOK {
+		t.Errorf("legacy tenant-wide key proxy status = %d; want 200", code)
+	}
 
 	// With strict mode enabled, unidentified callers are denied.
 	if err := env.store.SetTenantRBACStrictMode(context.Background(), env.tenant.ID, true); err != nil {
@@ -263,7 +266,12 @@ func TestProxy_EnforcesGroupGrants(t *testing.T) {
 	if code := proxy(""); code != http.StatusForbidden {
 		t.Errorf("strict-mode tokenless proxy status = %d; want 403", code)
 	}
-	if code := proxy(sign(callerid.Claims{Role: models.RoleMember, GroupIDs: []string{groupID}})); code != http.StatusOK {
+	// A legacy tenant-wide API key mints a token with a role but no user; it
+	// keeps tenant-wide access until strict mode is on.
+	if code := proxy(sign(callerid.Claims{Role: models.RoleInvoke})); code != http.StatusForbidden {
+		t.Errorf("strict-mode legacy-key proxy status = %d; want 403", code)
+	}
+	if code := proxy(sign(callerid.Claims{UserID: "user-1", Role: models.RoleMember, GroupIDs: []string{groupID}})); code != http.StatusOK {
 		t.Errorf("strict-mode granted member proxy status = %d; want 200", code)
 	}
 }

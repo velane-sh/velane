@@ -417,8 +417,9 @@ func (h *ConnectionsHandler) Proxy(w http.ResponseWriter, r *http.Request) {
 }
 
 // callerMayUseConnection verifies the signed caller token against the group
-// grants on the connection's credential profile. A missing or unverifiable
-// token keeps the pre-RBAC behaviour unless the tenant enabled strict mode.
+// grants on the connection's credential profile. A missing, unverifiable or
+// user-less token keeps the pre-RBAC behaviour unless the tenant enabled strict
+// mode, matching the visibility rule the list endpoints apply.
 func (h *ConnectionsHandler) callerMayUseConnection(r *http.Request, tenantID string, conn *models.Connection) bool {
 	profileID := ""
 	if conn.CredentialProfileID != nil {
@@ -436,20 +437,23 @@ func (h *ConnectionsHandler) callerMayUseConnection(r *http.Request, tenantID st
 	}
 
 	claims := h.verifiedCallerClaims(r, tenantID)
-	if claims == nil {
-		if !restricted {
-			return true
-		}
+	if claims != nil && models.RoleSeesAllIntegrations(claims.Role) {
+		return true
+	}
+	if !restricted {
+		return true
+	}
+
+	// No identified user behind the call — either no token at all or a legacy
+	// tenant-wide API key, which owns no groups. Both stay tenant-wide unless
+	// the tenant opted into strict mode.
+	if claims == nil || claims.UserID == "" {
 		strict, err := h.store.TenantRBACStrictMode(r.Context(), tenantID)
 		if err != nil {
 			h.log.Error("proxy: read tenant strict mode", zap.Error(err))
 			return false
 		}
 		return !strict
-	}
-
-	if models.RoleSeesAllIntegrations(claims.Role) || !restricted {
-		return true
 	}
 
 	granted, err := h.store.CredentialProfileGrantedToGroups(r.Context(), profileID, claims.GroupIDs)
