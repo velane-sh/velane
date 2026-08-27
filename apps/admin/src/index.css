@@ -1,3 +1,53 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: #f9fafb;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f9fafb;
+    --color-border: #e5e7eb;
+    --color-border-strong: #d1d5db;
+    --color-text: #111827;
+    --color-text-muted: #6b7280;
+    --color-text-subtle: #9ca3af;
+    --color-accent: #6366f1;
+    --color-accent-fg: #ffffff;
+    --color-accent-hover: color-mix(in srgb, var(--color-accent) 85%, #000);
+    --color-accent-subtle: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+    --color-danger: #dc2626;
+    --color-danger-subtle: #fef2f2;
+    --color-danger-text: #b91c1c;
+    --color-success: #16a34a;
+    --color-success-subtle: #f0fdf4;
+    --color-success-text: #15803d;
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 1rem;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+    --shadow-overlay: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+
+  .dark {
+    --color-bg: #09090b;
+    --color-surface: #131316;
+    --color-surface-muted: #1a1a1f;
+    --color-border: #27272a;
+    --color-border-strong: #3f3f46;
+    --color-text: #fafafa;
+    --color-text-muted: #a1a1aa;
+    --color-text-subtle: #71717a;
+    --color-accent-subtle: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface));
+    --color-danger-subtle: #2a1215;
+    --color-danger-text: #fca5a5;
+    --color-success-subtle: #0f2417;
+    --color-success-text: #86efac;
+  }
+
+  body {
+    @apply bg-bg text-content antialiased;
+  }
+}

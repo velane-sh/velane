@@ -25,6 +25,11 @@ export default function BrandingPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    document.documentElement.style.setProperty('--branding-preview-font', branding.font_family || 'inherit')
+    document.documentElement.style.setProperty('--branding-preview-accent', branding.accent_color || '#000')
+  }, [branding.accent_color, branding.font_family])
+
   const handleSave = async (e: FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -153,8 +158,7 @@ export default function BrandingPage() {
       <div className="w-72 flex-shrink-0">
         <h2 className="mb-3 text-sm font-semibold text-gray-700">Preview</h2>
         <div
-          className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
-          style={{ fontFamily: branding.font_family || 'inherit' }}
+          className="rounded-lg border border-gray-200 bg-white p-4 font-[var(--branding-preview-font)] shadow-sm"
         >
           {branding.logo_url ? (
             <img
@@ -167,8 +171,7 @@ export default function BrandingPage() {
             <div className="mb-3 h-8 w-24 rounded bg-gray-200" />
           )}
           <div
-            className="mb-2 h-6 w-full rounded"
-            style={{ backgroundColor: branding.accent_color || '#000' }}
+            className="mb-2 h-6 w-full rounded bg-[var(--branding-preview-accent)]"
           />
           <p className="text-xs text-gray-600">Sample embed content</p>
           {!branding.hide_branding && (
